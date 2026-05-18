@@ -1,0 +1,1745 @@
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const PadelChampionshipApp());
+}
+
+enum UserRole { admin, joueur }
+
+enum UserStatus { actif, bloque }
+
+enum MatchStatus { programme, resultatSaisi, valide, forfait }
+
+enum TournamentRound { quart, demi, finale }
+
+class AppUser {
+  AppUser({
+    required this.id,
+    required this.nom,
+    required this.email,
+    required this.password,
+    required this.role,
+    required this.niveau,
+    this.status = UserStatus.actif,
+    this.clubId,
+  });
+
+  final int id;
+  final String nom;
+  final String email;
+  final String password;
+  final UserRole role;
+  int niveau;
+  UserStatus status;
+  int? clubId;
+
+  String get categorieNiveau {
+    if (niveau <= 3) return 'Débutant';
+    if (niveau <= 6) return 'Intermédiaire';
+    if (niveau <= 8) return 'Avancé';
+    return 'Expert';
+  }
+}
+
+class Team {
+  Team({required this.id, required this.nom, required this.playerIds});
+
+  final int id;
+  final String nom;
+  final List<int> playerIds;
+}
+
+class Club {
+  Club({required this.id, required this.nom, required this.localisation});
+
+  final int id;
+  final String nom;
+  final String localisation;
+}
+
+class MatchScore {
+  MatchScore({required this.setsEquipe1, required this.setsEquipe2});
+
+  final int setsEquipe1;
+  final int setsEquipe2;
+}
+
+class MatchEntry {
+  MatchEntry({
+    required this.id,
+    required this.date,
+    required this.terrain,
+    required this.equipe1Id,
+    required this.equipe2Id,
+    this.status = MatchStatus.programme,
+    this.scoreEquipe1,
+    this.scoreEquipe2,
+    this.scoreValide,
+  });
+
+  final int id;
+  final DateTime date;
+  final String terrain;
+  final int equipe1Id;
+  final int equipe2Id;
+  MatchStatus status;
+  MatchScore? scoreEquipe1;
+  MatchScore? scoreEquipe2;
+  MatchScore? scoreValide;
+}
+
+class TournamentMatch {
+  TournamentMatch({
+    required this.id,
+    required this.round,
+    required this.joueur1,
+    required this.joueur2,
+    this.vainqueur,
+  });
+
+  final int id;
+  final TournamentRound round;
+  final int joueur1;
+  final int joueur2;
+  int? vainqueur;
+}
+
+class Tournament {
+  Tournament({
+    required this.id,
+    required this.nom,
+    required this.clubId,
+    required this.playerIds,
+    required this.bracket,
+  });
+
+  final int id;
+  final String nom;
+  final int clubId;
+  final List<int> playerIds;
+  final List<TournamentMatch> bracket;
+}
+
+class NiveauHistory {
+  NiveauHistory({
+    required this.id,
+    required this.joueurId,
+    required this.date,
+    required this.scoreTest,
+    required this.niveauAttribue,
+  });
+
+  final int id;
+  final int joueurId;
+  final DateTime date;
+  final int scoreTest;
+  final int niveauAttribue;
+}
+
+class Reward {
+  Reward({
+    required this.id,
+    required this.mois,
+    required this.joueurId,
+    required this.typeCadeau,
+  });
+
+  final int id;
+  final String mois;
+  final int joueurId;
+  final String typeCadeau;
+}
+
+class PlayerStanding {
+  PlayerStanding({
+    required this.player,
+    required this.points,
+    required this.victoires,
+    required this.defaites,
+    required this.matchsJoues,
+    required this.diffSets,
+  });
+
+  final AppUser player;
+  final int points;
+  final int victoires;
+  final int defaites;
+  final int matchsJoues;
+  final int diffSets;
+}
+
+class ChampionshipService {
+  ChampionshipService() {
+    _seedData();
+  }
+
+  final List<AppUser> _users = [];
+  final List<Team> _teams = [];
+  final List<MatchEntry> _matches = [];
+  final List<Club> _clubs = [];
+  final List<NiveauHistory> _niveauHistory = [];
+  final List<Reward> _rewards = [];
+  final List<Tournament> _tournaments = [];
+
+  int _userId = 0;
+  int _teamId = 0;
+  int _matchId = 0;
+  int _clubId = 0;
+  int _testId = 0;
+  int _rewardId = 0;
+  int _tournamentId = 0;
+  int _tournamentMatchId = 0;
+
+  List<AppUser> get users => List.unmodifiable(_users);
+  List<AppUser> get joueurs =>
+      _users.where((u) => u.role == UserRole.joueur).toList(growable: false);
+  List<Team> get teams => List.unmodifiable(_teams);
+  List<MatchEntry> get matches => List.unmodifiable(_matches);
+  List<Club> get clubs => List.unmodifiable(_clubs);
+  List<NiveauHistory> get niveauHistory => List.unmodifiable(_niveauHistory);
+  List<Reward> get rewards => List.unmodifiable(_rewards);
+  List<Tournament> get tournaments => List.unmodifiable(_tournaments);
+
+  AppUser? login(String email, String password) {
+    final user = _users.firstWhereOrNull((u) => u.email == email);
+    if (user != null &&
+        user.password == password &&
+        user.status == UserStatus.actif) {
+      return user;
+    }
+    return null;
+  }
+
+  void createJoueur({
+    required String nom,
+    required String email,
+    required String password,
+    required int niveau,
+    required int clubId,
+  }) {
+    _users.add(
+      AppUser(
+        id: ++_userId,
+        nom: nom,
+        email: email,
+        password: password,
+        role: UserRole.joueur,
+        niveau: niveau,
+        clubId: clubId,
+      ),
+    );
+  }
+
+  void updateJoueurNiveau(int joueurId, int nouveauNiveau, int scoreTest) {
+    final joueur = _users.firstWhere((u) => u.id == joueurId);
+    joueur.niveau = nouveauNiveau;
+    _niveauHistory.add(
+      NiveauHistory(
+        id: ++_testId,
+        joueurId: joueurId,
+        date: DateTime.now(),
+        scoreTest: scoreTest,
+        niveauAttribue: nouveauNiveau,
+      ),
+    );
+  }
+
+  void changeJoueurStatus(int joueurId, UserStatus status) {
+    final joueur = _users.firstWhere((u) => u.id == joueurId);
+    joueur.status = status;
+  }
+
+  void deleteJoueur(int joueurId) {
+    _users.removeWhere((u) => u.id == joueurId && u.role == UserRole.joueur);
+    for (final team in _teams) {
+      team.playerIds.removeWhere((id) => id == joueurId);
+    }
+  }
+
+  bool createTeam(String nom, List<int> playerIds) {
+    if (playerIds.length != 2) return false;
+    final players = _users.where((u) => playerIds.contains(u.id)).toList();
+    if (players.length != 2) return false;
+    final niveauDiff = (players[0].niveau - players[1].niveau).abs();
+    if (niveauDiff > 2) return false;
+    _teams.add(Team(id: ++_teamId, nom: nom, playerIds: playerIds));
+    return true;
+  }
+
+  void deleteTeam(int teamId) {
+    _teams.removeWhere((t) => t.id == teamId);
+    _matches.removeWhere((m) => m.equipe1Id == teamId || m.equipe2Id == teamId);
+  }
+
+  bool scheduleMatch({
+    required int team1Id,
+    required int team2Id,
+    required DateTime date,
+    required String terrain,
+  }) {
+    if (team1Id == team2Id) return false;
+    if (!_teams.any((t) => t.id == team1Id) ||
+        !_teams.any((t) => t.id == team2Id)) {
+      return false;
+    }
+    _matches.add(
+      MatchEntry(
+        id: ++_matchId,
+        date: date,
+        terrain: terrain,
+        equipe1Id: team1Id,
+        equipe2Id: team2Id,
+      ),
+    );
+    return true;
+  }
+
+  bool submitScore({
+    required int matchId,
+    required int teamId,
+    required int setsEquipe1,
+    required int setsEquipe2,
+  }) {
+    final match = _matches.firstWhere((m) => m.id == matchId);
+    if (match.status == MatchStatus.valide) return false;
+
+    if (DateTime.now().isAfter(match.date.add(const Duration(hours: 24)))) {
+      match.status = MatchStatus.forfait;
+      return false;
+    }
+
+    final score = MatchScore(
+      setsEquipe1: setsEquipe1,
+      setsEquipe2: setsEquipe2,
+    );
+    if (teamId == match.equipe1Id) {
+      match.scoreEquipe1 = score;
+    } else if (teamId == match.equipe2Id) {
+      match.scoreEquipe2 = score;
+    } else {
+      return false;
+    }
+    match.status = MatchStatus.resultatSaisi;
+    return true;
+  }
+
+  bool validerOuCorrigerResultat(
+    int matchId, {
+    int? setsEquipe1,
+    int? setsEquipe2,
+  }) {
+    final match = _matches.firstWhere((m) => m.id == matchId);
+
+    if (setsEquipe1 != null && setsEquipe2 != null) {
+      match.scoreValide = MatchScore(
+        setsEquipe1: setsEquipe1,
+        setsEquipe2: setsEquipe2,
+      );
+      match.status = MatchStatus.valide;
+      return true;
+    }
+
+    if (match.scoreEquipe1 != null &&
+        match.scoreEquipe2 != null &&
+        match.scoreEquipe1!.setsEquipe1 == match.scoreEquipe2!.setsEquipe1 &&
+        match.scoreEquipe1!.setsEquipe2 == match.scoreEquipe2!.setsEquipe2) {
+      match.scoreValide = MatchScore(
+        setsEquipe1: match.scoreEquipe1!.setsEquipe1,
+        setsEquipe2: match.scoreEquipe1!.setsEquipe2,
+      );
+      match.status = MatchStatus.valide;
+      return true;
+    }
+    return false;
+  }
+
+  List<PlayerStanding> getStandings() {
+    final points = <int, int>{};
+    final victoires = <int, int>{};
+    final defaites = <int, int>{};
+    final diffSets = <int, int>{};
+    final matchs = <int, int>{};
+
+    for (final joueur in joueurs) {
+      points[joueur.id] = 0;
+      victoires[joueur.id] = 0;
+      defaites[joueur.id] = 0;
+      diffSets[joueur.id] = 0;
+      matchs[joueur.id] = 0;
+    }
+
+    for (final match in _matches.where((m) => m.status == MatchStatus.valide)) {
+      final score = match.scoreValide;
+      if (score == null) continue;
+      final team1 = _teams.firstWhere((t) => t.id == match.equipe1Id);
+      final team2 = _teams.firstWhere((t) => t.id == match.equipe2Id);
+
+      final team1Win = score.setsEquipe1 > score.setsEquipe2;
+      final draw = score.setsEquipe1 == score.setsEquipe2;
+      final setDiff1 = score.setsEquipe1 - score.setsEquipe2;
+      final setDiff2 = score.setsEquipe2 - score.setsEquipe1;
+
+      for (final id in team1.playerIds) {
+        matchs[id] = (matchs[id] ?? 0) + 1;
+        diffSets[id] = (diffSets[id] ?? 0) + setDiff1;
+        if (draw) {
+          points[id] = (points[id] ?? 0) + 2;
+        } else if (team1Win) {
+          points[id] = (points[id] ?? 0) + 3;
+          victoires[id] = (victoires[id] ?? 0) + 1;
+        } else {
+          points[id] = (points[id] ?? 0) + 1;
+          defaites[id] = (defaites[id] ?? 0) + 1;
+        }
+      }
+
+      for (final id in team2.playerIds) {
+        matchs[id] = (matchs[id] ?? 0) + 1;
+        diffSets[id] = (diffSets[id] ?? 0) + setDiff2;
+        if (draw) {
+          points[id] = (points[id] ?? 0) + 2;
+        } else if (!team1Win) {
+          points[id] = (points[id] ?? 0) + 3;
+          victoires[id] = (victoires[id] ?? 0) + 1;
+        } else {
+          points[id] = (points[id] ?? 0) + 1;
+          defaites[id] = (defaites[id] ?? 0) + 1;
+        }
+      }
+    }
+
+    final standings = joueurs
+        .map(
+          (p) => PlayerStanding(
+            player: p,
+            points: points[p.id] ?? 0,
+            victoires: victoires[p.id] ?? 0,
+            defaites: defaites[p.id] ?? 0,
+            matchsJoues: matchs[p.id] ?? 0,
+            diffSets: diffSets[p.id] ?? 0,
+          ),
+        )
+        .toList();
+
+    standings.sort((a, b) {
+      final byPoints = b.points.compareTo(a.points);
+      if (byPoints != 0) return byPoints;
+      final byWins = b.victoires.compareTo(a.victoires);
+      if (byWins != 0) return byWins;
+      return b.diffSets.compareTo(a.diffSets);
+    });
+
+    return standings;
+  }
+
+  List<PlayerStanding> generateMonthlyTop3AndRewards(DateTime monthRef) {
+    final standings = getStandings().take(3).toList();
+    final mois =
+        '${monthRef.month.toString().padLeft(2, '0')}/${monthRef.year}';
+    _rewards.removeWhere((r) => r.mois == mois);
+
+    for (int i = 0; i < standings.length; i++) {
+      _rewards.add(
+        Reward(
+          id: ++_rewardId,
+          mois: mois,
+          joueurId: standings[i].player.id,
+          typeCadeau: i == 0
+              ? 'Trophée Or'
+              : i == 1
+              ? 'Trophée Argent'
+              : 'Trophée Bronze',
+        ),
+      );
+    }
+    return standings;
+  }
+
+  bool createTournament({
+    required String nom,
+    required int clubId,
+    required List<int> playerIds,
+  }) {
+    if (playerIds.length != 8) return false;
+
+    final quart = [
+      TournamentMatch(
+        id: ++_tournamentMatchId,
+        round: TournamentRound.quart,
+        joueur1: playerIds[0],
+        joueur2: playerIds[1],
+      ),
+      TournamentMatch(
+        id: ++_tournamentMatchId,
+        round: TournamentRound.quart,
+        joueur1: playerIds[2],
+        joueur2: playerIds[3],
+      ),
+      TournamentMatch(
+        id: ++_tournamentMatchId,
+        round: TournamentRound.quart,
+        joueur1: playerIds[4],
+        joueur2: playerIds[5],
+      ),
+      TournamentMatch(
+        id: ++_tournamentMatchId,
+        round: TournamentRound.quart,
+        joueur1: playerIds[6],
+        joueur2: playerIds[7],
+      ),
+    ];
+
+    _tournaments.add(
+      Tournament(
+        id: ++_tournamentId,
+        nom: nom,
+        clubId: clubId,
+        playerIds: playerIds,
+        bracket: quart,
+      ),
+    );
+    return true;
+  }
+
+  bool setTournamentWinner({
+    required int tournamentId,
+    required int matchId,
+    required int winnerId,
+  }) {
+    final tournament = _tournaments.firstWhere((t) => t.id == tournamentId);
+    final current = tournament.bracket.firstWhere((m) => m.id == matchId);
+    current.vainqueur = winnerId;
+
+    final quart = tournament.bracket
+        .where((m) => m.round == TournamentRound.quart)
+        .toList();
+    final demi = tournament.bracket
+        .where((m) => m.round == TournamentRound.demi)
+        .toList();
+    final finale = tournament.bracket
+        .where((m) => m.round == TournamentRound.finale)
+        .toList();
+
+    if (quart.every((m) => m.vainqueur != null) && demi.isEmpty) {
+      tournament.bracket.addAll([
+        TournamentMatch(
+          id: ++_tournamentMatchId,
+          round: TournamentRound.demi,
+          joueur1: quart[0].vainqueur!,
+          joueur2: quart[1].vainqueur!,
+        ),
+        TournamentMatch(
+          id: ++_tournamentMatchId,
+          round: TournamentRound.demi,
+          joueur1: quart[2].vainqueur!,
+          joueur2: quart[3].vainqueur!,
+        ),
+      ]);
+      return true;
+    }
+
+    if (demi.isNotEmpty &&
+        demi.every((m) => m.vainqueur != null) &&
+        finale.isEmpty) {
+      tournament.bracket.add(
+        TournamentMatch(
+          id: ++_tournamentMatchId,
+          round: TournamentRound.finale,
+          joueur1: demi[0].vainqueur!,
+          joueur2: demi[1].vainqueur!,
+        ),
+      );
+      return true;
+    }
+
+    return true;
+  }
+
+  Map<String, int> statsEquipe(int teamId) {
+    int victoires = 0;
+    int defaites = 0;
+    int points = 0;
+
+    for (final match in _matches.where((m) => m.status == MatchStatus.valide)) {
+      if (match.equipe1Id != teamId && match.equipe2Id != teamId) continue;
+      final score = match.scoreValide;
+      if (score == null) continue;
+
+      final isEquipe1 = match.equipe1Id == teamId;
+      final ownSets = isEquipe1 ? score.setsEquipe1 : score.setsEquipe2;
+      final oppSets = isEquipe1 ? score.setsEquipe2 : score.setsEquipe1;
+
+      if (ownSets > oppSets) {
+        victoires++;
+        points += 6;
+      } else if (ownSets < oppSets) {
+        defaites++;
+        points += 2;
+      } else {
+        points += 4;
+      }
+    }
+
+    return {'victoires': victoires, 'defaites': defaites, 'points': points};
+  }
+
+  void _seedData() {
+    _clubs.addAll([
+      Club(id: ++_clubId, nom: 'Padel Elite', localisation: 'Tunis'),
+      Club(id: ++_clubId, nom: 'Smash Club', localisation: 'Sousse'),
+    ]);
+
+    _users.add(
+      AppUser(
+        id: ++_userId,
+        nom: 'Admin Club',
+        email: 'admin@padel.com',
+        password: 'Admin123!',
+        role: UserRole.admin,
+        niveau: 10,
+        clubId: 1,
+      ),
+    );
+
+    createJoueur(
+      nom: 'Ali Ben',
+      email: 'ali@padel.com',
+      password: 'Player123!',
+      niveau: 5,
+      clubId: 1,
+    );
+    createJoueur(
+      nom: 'Sara K',
+      email: 'sara@padel.com',
+      password: 'Player123!',
+      niveau: 6,
+      clubId: 1,
+    );
+    createJoueur(
+      nom: 'Youssef M',
+      email: 'youssef@padel.com',
+      password: 'Player123!',
+      niveau: 7,
+      clubId: 2,
+    );
+    createJoueur(
+      nom: 'Amal T',
+      email: 'amal@padel.com',
+      password: 'Player123!',
+      niveau: 8,
+      clubId: 2,
+    );
+    createJoueur(
+      nom: 'Walid H',
+      email: 'walid@padel.com',
+      password: 'Player123!',
+      niveau: 4,
+      clubId: 1,
+    );
+    createJoueur(
+      nom: 'Nour A',
+      email: 'nour@padel.com',
+      password: 'Player123!',
+      niveau: 5,
+      clubId: 2,
+    );
+    createJoueur(
+      nom: 'Karim F',
+      email: 'karim@padel.com',
+      password: 'Player123!',
+      niveau: 6,
+      clubId: 1,
+    );
+    createJoueur(
+      nom: 'Meriem B',
+      email: 'meriem@padel.com',
+      password: 'Player123!',
+      niveau: 7,
+      clubId: 2,
+    );
+
+    createTeam('Team A', [2, 3]);
+    createTeam('Team B', [4, 5]);
+    createTeam('Team C', [6, 7]);
+    createTeam('Team D', [8, 9]);
+  }
+}
+
+class AppController extends ChangeNotifier {
+  final ChampionshipService service = ChampionshipService();
+  AppUser? currentUser;
+
+  bool login(String email, String password) {
+    currentUser = service.login(email.trim(), password.trim());
+    notifyListeners();
+    return currentUser != null;
+  }
+
+  void logout() {
+    currentUser = null;
+    notifyListeners();
+  }
+}
+
+class PadelChampionshipApp extends StatefulWidget {
+  const PadelChampionshipApp({super.key});
+
+  @override
+  State<PadelChampionshipApp> createState() => _PadelChampionshipAppState();
+}
+
+class _PadelChampionshipAppState extends State<PadelChampionshipApp> {
+  final AppController controller = AppController();
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Padel Championship',
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+            useMaterial3: true,
+          ),
+          home: controller.currentUser == null
+              ? LoginScreen(controller: controller)
+              : controller.currentUser!.role == UserRole.admin
+              ? AdminHome(controller: controller)
+              : PlayerHome(controller: controller),
+        );
+      },
+    );
+  }
+}
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key, required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Card(
+              margin: const EdgeInsets.all(16),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Championnat de Padel',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _emailCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return 'Email requis';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _passCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Mot de passe',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return 'Mot de passe requis';
+                          return null;
+                        },
+                      ),
+                      if (_error != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          _error!,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            if (_formKey.currentState!.validate()) {
+                              final ok = widget.controller.login(
+                                _emailCtrl.text,
+                                _passCtrl.text,
+                              );
+                              if (!ok) {
+                                setState(
+                                  () => _error =
+                                      'Identifiants invalides ou compte bloqué',
+                                );
+                              }
+                            }
+                          },
+                          child: const Text('Se connecter'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Compte admin: admin@padel.com / Admin123!'),
+                      const Text('Compte joueur: ali@padel.com / Player123!'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AdminHome extends StatefulWidget {
+  const AdminHome({super.key, required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<AdminHome> createState() => _AdminHomeState();
+}
+
+class _AdminHomeState extends State<AdminHome> {
+  int tab = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final service = widget.controller.service;
+    final tabs = [
+      _AdminJoueursTab(controller: widget.controller),
+      _AdminEquipesTab(controller: widget.controller),
+      _AdminMatchsTab(controller: widget.controller),
+      _AdminClassementTab(controller: widget.controller),
+      _AdminTournoisTab(controller: widget.controller),
+    ];
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Espace Administrateur'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Center(child: Text('Clubs: ${service.clubs.length}')),
+          ),
+          IconButton(
+            onPressed: widget.controller.logout,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Déconnexion',
+          ),
+        ],
+      ),
+      body: tabs[tab],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: tab,
+        onDestinationSelected: (value) => setState(() => tab = value),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.people), label: 'Joueurs'),
+          NavigationDestination(icon: Icon(Icons.groups_2), label: 'Équipes'),
+          NavigationDestination(
+            icon: Icon(Icons.sports_tennis),
+            label: 'Matchs',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.emoji_events),
+            label: 'Classement',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.account_tree),
+            label: 'Tournois',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminJoueursTab extends StatefulWidget {
+  const _AdminJoueursTab({required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<_AdminJoueursTab> createState() => _AdminJoueursTabState();
+}
+
+class _AdminJoueursTabState extends State<_AdminJoueursTab> {
+  void _showCreateDialog() {
+    final nomCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final passCtrl = TextEditingController(text: 'Player123!');
+    int niveau = 5;
+    int? clubId = widget.controller.service.clubs.firstOrNull?.id;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ajouter joueur'),
+        content: StatefulBuilder(
+          builder: (context, setStateDialog) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nomCtrl,
+                decoration: const InputDecoration(labelText: 'Nom'),
+              ),
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(labelText: 'Email'),
+              ),
+              TextField(
+                controller: passCtrl,
+                decoration: const InputDecoration(labelText: 'Mot de passe'),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                value: niveau,
+                items: List.generate(10, (i) => i + 1)
+                    .map(
+                      (n) =>
+                          DropdownMenuItem(value: n, child: Text('Niveau $n')),
+                    )
+                    .toList(),
+                onChanged: (v) => setStateDialog(() => niveau = v ?? 5),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                value: clubId,
+                items: widget.controller.service.clubs
+                    .map(
+                      (c) => DropdownMenuItem(value: c.id, child: Text(c.nom)),
+                    )
+                    .toList(),
+                onChanged: (v) => setStateDialog(() => clubId = v),
+                decoration: const InputDecoration(labelText: 'Club'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (nomCtrl.text.isEmpty ||
+                  emailCtrl.text.isEmpty ||
+                  passCtrl.text.isEmpty ||
+                  clubId == null) {
+                return;
+              }
+              widget.controller.service.createJoueur(
+                nom: nomCtrl.text,
+                email: emailCtrl.text,
+                password: passCtrl.text,
+                niveau: niveau,
+                clubId: clubId!,
+              );
+              widget.controller.notifyListeners();
+              Navigator.pop(context);
+            },
+            child: const Text('Créer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final joueurs = widget.controller.service.joueurs;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              FilledButton.icon(
+                onPressed: _showCreateDialog,
+                icon: const Icon(Icons.person_add),
+                label: const Text('Ajouter joueur'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView.builder(
+              itemCount: joueurs.length,
+              itemBuilder: (context, index) {
+                final joueur = joueurs[index];
+                return Card(
+                  child: ListTile(
+                    title: Text(joueur.nom),
+                    subtitle: Text(
+                      '${joueur.email} | Niveau ${joueur.niveau} (${joueur.categorieNiveau}) | ${joueur.status.name}',
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Niveau +1',
+                          onPressed: () {
+                            if (joueur.niveau < 10) {
+                              widget.controller.service.updateJoueurNiveau(
+                                joueur.id,
+                                joueur.niveau + 1,
+                                80,
+                              );
+                              widget.controller.notifyListeners();
+                            }
+                          },
+                          icon: const Icon(Icons.trending_up),
+                        ),
+                        IconButton(
+                          tooltip: joueur.status == UserStatus.actif
+                              ? 'Bloquer'
+                              : 'Débloquer',
+                          onPressed: () {
+                            widget.controller.service.changeJoueurStatus(
+                              joueur.id,
+                              joueur.status == UserStatus.actif
+                                  ? UserStatus.bloque
+                                  : UserStatus.actif,
+                            );
+                            widget.controller.notifyListeners();
+                          },
+                          icon: Icon(
+                            joueur.status == UserStatus.actif
+                                ? Icons.block
+                                : Icons.check_circle,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Supprimer',
+                          onPressed: () {
+                            widget.controller.service.deleteJoueur(joueur.id);
+                            widget.controller.notifyListeners();
+                          },
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminEquipesTab extends StatefulWidget {
+  const _AdminEquipesTab({required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<_AdminEquipesTab> createState() => _AdminEquipesTabState();
+}
+
+class _AdminEquipesTabState extends State<_AdminEquipesTab> {
+  void _createTeamDialog() {
+    final nomCtrl = TextEditingController();
+    int? p1;
+    int? p2;
+    String? error;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('Créer équipe'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nomCtrl,
+                decoration: const InputDecoration(labelText: 'Nom équipe'),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                value: p1,
+                items: widget.controller.service.joueurs
+                    .map(
+                      (j) => DropdownMenuItem(
+                        value: j.id,
+                        child: Text('${j.nom} (N${j.niveau})'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setStateDialog(() => p1 = v),
+                decoration: const InputDecoration(labelText: 'Joueur 1'),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                value: p2,
+                items: widget.controller.service.joueurs
+                    .map(
+                      (j) => DropdownMenuItem(
+                        value: j.id,
+                        child: Text('${j.nom} (N${j.niveau})'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setStateDialog(() => p2 = v),
+                decoration: const InputDecoration(labelText: 'Joueur 2'),
+              ),
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    error!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (nomCtrl.text.isEmpty || p1 == null || p2 == null) {
+                  setStateDialog(
+                    () => error = 'Veuillez remplir tous les champs',
+                  );
+                  return;
+                }
+                final ok = widget.controller.service.createTeam(nomCtrl.text, [
+                  p1!,
+                  p2!,
+                ]);
+                if (!ok) {
+                  setStateDialog(
+                    () => error =
+                        'Équipe invalide (2 joueurs et niveau compatible)',
+                  );
+                  return;
+                }
+                widget.controller.notifyListeners();
+                Navigator.pop(context);
+              },
+              child: const Text('Créer'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final service = widget.controller.service;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              FilledButton.icon(
+                onPressed: _createTeamDialog,
+                icon: const Icon(Icons.group_add),
+                label: const Text('Créer équipe'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView(
+              children: service.teams.map((team) {
+                final joueurs = service.joueurs
+                    .where((j) => team.playerIds.contains(j.id))
+                    .toList();
+                final stats = service.statsEquipe(team.id);
+                return Card(
+                  child: ListTile(
+                    title: Text(team.nom),
+                    subtitle: Text(
+                      '${joueurs.map((j) => j.nom).join(' / ')} | V:${stats['victoires']} D:${stats['defaites']} Pts:${stats['points']}',
+                    ),
+                    trailing: IconButton(
+                      onPressed: () {
+                        service.deleteTeam(team.id);
+                        widget.controller.notifyListeners();
+                      },
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminMatchsTab extends StatefulWidget {
+  const _AdminMatchsTab({required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<_AdminMatchsTab> createState() => _AdminMatchsTabState();
+}
+
+class _AdminMatchsTabState extends State<_AdminMatchsTab> {
+  void _scheduleDialog() {
+    int? team1;
+    int? team2;
+    DateTime date = DateTime.now().add(const Duration(days: 1));
+    final terrainCtrl = TextEditingController(text: 'Terrain 1');
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('Programmer un match'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                value: team1,
+                items: widget.controller.service.teams
+                    .map(
+                      (t) => DropdownMenuItem(value: t.id, child: Text(t.nom)),
+                    )
+                    .toList(),
+                onChanged: (v) => setStateDialog(() => team1 = v),
+                decoration: const InputDecoration(labelText: 'Équipe 1'),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                value: team2,
+                items: widget.controller.service.teams
+                    .map(
+                      (t) => DropdownMenuItem(value: t.id, child: Text(t.nom)),
+                    )
+                    .toList(),
+                onChanged: (v) => setStateDialog(() => team2 = v),
+                decoration: const InputDecoration(labelText: 'Équipe 2'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: terrainCtrl,
+                decoration: const InputDecoration(labelText: 'Terrain'),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Date: ${date.toLocal().toString().substring(0, 16)}',
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        firstDate: DateTime.now().subtract(
+                          const Duration(days: 1),
+                        ),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                        initialDate: date,
+                      );
+                      if (picked != null) {
+                        setStateDialog(() {
+                          date = DateTime(
+                            picked.year,
+                            picked.month,
+                            picked.day,
+                            18,
+                            0,
+                          );
+                        });
+                      }
+                    },
+                    child: const Text('Choisir'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (team1 == null || team2 == null) return;
+                widget.controller.service.scheduleMatch(
+                  team1Id: team1!,
+                  team2Id: team2!,
+                  date: date,
+                  terrain: terrainCtrl.text,
+                );
+                widget.controller.notifyListeners();
+                Navigator.pop(context);
+              },
+              child: const Text('Programmer'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _validateDialog(MatchEntry match) {
+    final s1 = TextEditingController(
+      text: match.scoreValide?.setsEquipe1.toString() ?? '0',
+    );
+    final s2 = TextEditingController(
+      text: match.scoreValide?.setsEquipe2.toString() ?? '0',
+    );
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Valider/Modifier score'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: s1,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Sets Équipe 1'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: s2,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Sets Équipe 2'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () {
+              widget.controller.service.validerOuCorrigerResultat(
+                match.id,
+                setsEquipe1: int.tryParse(s1.text) ?? 0,
+                setsEquipe2: int.tryParse(s2.text) ?? 0,
+              );
+              widget.controller.notifyListeners();
+              Navigator.pop(context);
+            },
+            child: const Text('Valider'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final service = widget.controller.service;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              FilledButton.icon(
+                onPressed: _scheduleDialog,
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text('Programmer match'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView(
+              children: service.matches.map((m) {
+                final t1 = service.teams
+                    .firstWhere((t) => t.id == m.equipe1Id)
+                    .nom;
+                final t2 = service.teams
+                    .firstWhere((t) => t.id == m.equipe2Id)
+                    .nom;
+                final score = m.scoreValide != null
+                    ? '${m.scoreValide!.setsEquipe1}-${m.scoreValide!.setsEquipe2}'
+                    : m.scoreEquipe1 != null
+                    ? '${m.scoreEquipe1!.setsEquipe1}-${m.scoreEquipe1!.setsEquipe2} (saisi)'
+                    : 'En attente';
+                return Card(
+                  child: ListTile(
+                    title: Text('$t1 vs $t2'),
+                    subtitle: Text(
+                      '${m.date.toLocal().toString().substring(0, 16)} | ${m.terrain} | ${m.status.name} | Score: $score',
+                    ),
+                    trailing: IconButton(
+                      onPressed: () => _validateDialog(m),
+                      icon: const Icon(Icons.verified),
+                      tooltip: 'Valider score',
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminClassementTab extends StatelessWidget {
+  const _AdminClassementTab({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final service = controller.service;
+    final standings = service.getStandings();
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              FilledButton.icon(
+                onPressed: () {
+                  service.generateMonthlyTop3AndRewards(DateTime.now());
+                  controller.notifyListeners();
+                },
+                icon: const Icon(Icons.workspace_premium),
+                label: const Text('Générer Top 3 mensuel'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView.builder(
+              itemCount: standings.length,
+              itemBuilder: (context, i) {
+                final s = standings[i];
+                return Card(
+                  child: ListTile(
+                    leading: CircleAvatar(child: Text('${i + 1}')),
+                    title: Text(s.player.nom),
+                    subtitle: Text(
+                      'Pts:${s.points} | M:${s.matchsJoues} | V:${s.victoires} | D:${s.defaites} | Diff sets:${s.diffSets}',
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (service.rewards.isNotEmpty)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  children: service.rewards.take(3).map((r) {
+                    final joueur = service.joueurs.firstWhere(
+                      (j) => j.id == r.joueurId,
+                    );
+                    return Text('${r.typeCadeau}: ${joueur.nom} (${r.mois})');
+                  }).toList(),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminTournoisTab extends StatelessWidget {
+  const _AdminTournoisTab({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final service = controller.service;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              FilledButton.icon(
+                onPressed: () {
+                  final joueurs = service.joueurs
+                      .take(8)
+                      .map((e) => e.id)
+                      .toList();
+                  if (joueurs.length == 8) {
+                    service.createTournament(
+                      nom: 'Tournoi Club',
+                      clubId: 1,
+                      playerIds: joueurs,
+                    );
+                    controller.notifyListeners();
+                  }
+                },
+                icon: const Icon(Icons.add_box_outlined),
+                label: const Text('Créer tournoi (8 joueurs)'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView(
+              children: service.tournaments.map((tournament) {
+                final champion = tournament.bracket
+                    .where(
+                      (m) =>
+                          m.round == TournamentRound.finale &&
+                          m.vainqueur != null,
+                    )
+                    .map(
+                      (m) => service.joueurs
+                          .firstWhere((j) => j.id == m.vainqueur!)
+                          .nom,
+                    )
+                    .firstOrNull;
+                return Card(
+                  child: ExpansionTile(
+                    title: Text(tournament.nom),
+                    subtitle: Text(
+                      champion == null
+                          ? 'Champion: en cours'
+                          : 'Champion: $champion',
+                    ),
+                    children: tournament.bracket.map((m) {
+                      final j1 = service.joueurs.firstWhere(
+                        (j) => j.id == m.joueur1,
+                      );
+                      final j2 = service.joueurs.firstWhere(
+                        (j) => j.id == m.joueur2,
+                      );
+                      return ListTile(
+                        title: Text(
+                          '${m.round.name.toUpperCase()} - ${j1.nom} vs ${j2.nom}',
+                        ),
+                        subtitle: Text(
+                          m.vainqueur == null
+                              ? 'Vainqueur non défini'
+                              : 'Vainqueur: ${service.joueurs.firstWhere((j) => j.id == m.vainqueur).nom}',
+                        ),
+                        trailing: PopupMenuButton<int>(
+                          icon: const Icon(Icons.flag),
+                          onSelected: (winnerId) {
+                            service.setTournamentWinner(
+                              tournamentId: tournament.id,
+                              matchId: m.id,
+                              winnerId: winnerId,
+                            );
+                            controller.notifyListeners();
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem(value: j1.id, child: Text(j1.nom)),
+                            PopupMenuItem(value: j2.id, child: Text(j2.nom)),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class PlayerHome extends StatelessWidget {
+  const PlayerHome({super.key, required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = controller.currentUser!;
+    final service = controller.service;
+    final standings = service.getStandings();
+    final myIndex = standings.indexWhere((s) => s.player.id == user.id);
+    final myStanding = myIndex >= 0 ? standings[myIndex] : null;
+
+    final myTeams = service.teams
+        .where((t) => t.playerIds.contains(user.id))
+        .toList();
+    final myTeamIds = myTeams.map((e) => e.id).toSet();
+    final myMatches = service.matches
+        .where(
+          (m) =>
+              myTeamIds.contains(m.equipe1Id) ||
+              myTeamIds.contains(m.equipe2Id),
+        )
+        .toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Espace Joueur - ${user.nom}'),
+        actions: [
+          IconButton(
+            onPressed: controller.logout,
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Card(
+            child: ListTile(
+              title: Text('Niveau ${user.niveau} - ${user.categorieNiveau}'),
+              subtitle: Text(
+                myStanding == null
+                    ? 'Aucun match validé'
+                    : 'Position: ${myIndex + 1} | Points: ${myStanding.points} | Matchs: ${myStanding.matchsJoues}',
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Historique des matchs',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
+          ...myMatches.map((m) {
+            final t1 = service.teams.firstWhere((t) => t.id == m.equipe1Id).nom;
+            final t2 = service.teams.firstWhere((t) => t.id == m.equipe2Id).nom;
+            return Card(
+              child: ListTile(
+                title: Text('$t1 vs $t2'),
+                subtitle: Text(
+                  '${m.date.toLocal().toString().substring(0, 16)} | ${m.terrain} | ${m.status.name}',
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit_note),
+                  tooltip: 'Saisir résultat',
+                  onPressed: () => _submitScoreDialog(
+                    context,
+                    service,
+                    controller,
+                    m,
+                    myTeamIds,
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  void _submitScoreDialog(
+    BuildContext context,
+    ChampionshipService service,
+    AppController controller,
+    MatchEntry match,
+    Set<int> myTeamIds,
+  ) {
+    final s1 = TextEditingController(text: '0');
+    final s2 = TextEditingController(text: '0');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Saisie résultat'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: s1,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Sets Équipe 1'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: s2,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Sets Équipe 2'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final teamId = myTeamIds.contains(match.equipe1Id)
+                  ? match.equipe1Id
+                  : match.equipe2Id;
+              service.submitScore(
+                matchId: match.id,
+                teamId: teamId,
+                setsEquipe1: int.tryParse(s1.text) ?? 0,
+                setsEquipe2: int.tryParse(s2.text) ?? 0,
+              );
+              controller.notifyListeners();
+              Navigator.pop(context);
+            },
+            child: const Text('Envoyer'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+extension FirstWhereOrNullExtension<T> on Iterable<T> {
+  T? firstWhereOrNull(bool Function(T element) test) {
+    for (final value in this) {
+      if (test(value)) return value;
+    }
+    return null;
+  }
+}
+
+extension FirstOrNullListExtension<T> on List<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}

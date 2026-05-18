@@ -1,0 +1,108 @@
+@startuml
+' Diagramme de classes - backend/frontend (PlantUML)
+
+' Entities
+class User {
+  +Id: int
+  +Nom: string
+  +Email: string
+  +MotDePasseHash: string
+  +Role: UserRole
+  +Niveau: int
+  +Statut: UserStatus
+  +ClubId: int?
+}
+
+class Club {
+  +Id: int
+  +Nom: string
+  +Localisation: string
+}
+
+class Team {
+  +Id: int
+  +NomEquipe: string
+  +PointsTotal: int
+}
+
+class TeamPlayer {
+  +TeamId: int
+  +UserId: int
+}
+
+class ChampionshipMatch {
+  +Id: int
+  +Date: DateTime
+  +Terrain: string
+  +Equipe1Id: int
+  +Equipe2Id: int
+  +ScoreEquipe1: int?
+  +ScoreEquipe2: int?
+  +Statut: MatchStatus
+}
+
+class Participation {
+  +Id: int
+  +JoueurId: int
+  +MatchId: int
+  +PointsObtenus: int
+}
+
+class TechnicalTest {
+  +Id: int
+  +JoueurId: int
+  +DateTest: DateTime
+  +ScoreTest: int
+  +NiveauAttribue: int
+}
+
+class Reward {
+  +Id: int
+  +Mois: string
+  +JoueurId: int
+  +TypeCadeau: string
+}
+
+class Tournament {
+  +Id: int
+  +Nom: string
+  +ClubId: int
+}
+
+class TournamentMatch {
+  +Id: int
+  +Round: TournamentRound
+  +Joueur1Id: int
+  +Joueur2Id: int
+  +VainqueurId: int?
+  +TournamentId: int
+}
+
+' Relations / cardinalités
+Club "1" -- "0..*" User : Joueurs
+Club "1" -- "0..*" Tournament : Tournois
+
+Team "1" -- "0..*" TeamPlayer : contains
+User "1" -- "0..*" TeamPlayer : memberOf
+TeamPlayer "*" -- "*" User : association
+
+User "1" -- "0..*" Participation : participe
+Participation "*" -- "1" ChampionshipMatch : concerne
+
+ChampionshipMatch "1" -- "1" Team : Equipe1
+ChampionshipMatch "1" -- "1" Team : Equipe2
+
+Tournament "1" -- "0..*" TournamentMatch : contains
+TournamentMatch "*" -- "1" User : joueur1
+TournamentMatch "*" -- "1" User : joueur2
+
+User "1" -- "0..*" TechnicalTest : tests
+User "1" -- "0..*" Reward : rewards
+
+' Enums (synthèse)
+enum UserRole { Admin; Joueur }
+enum UserStatus { Actif; Bloque }
+enum MatchStatus { Programme; ResultatSaisi; Valide; Forfait }
+enum TournamentRound { Quart; Demi; Finale }
+
+@enduml

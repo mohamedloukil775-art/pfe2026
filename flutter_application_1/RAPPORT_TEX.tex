@@ -1,0 +1,83 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{courier}
+
+\geometry{margin=25mm}
+
+\lstdefinelanguage{Dart}{
+  keywords={abstract,as,assert,async,await,break,case,catch,class,const,continue,default,deferred,do,else,enum,export,extends,false,final,finally,for,if,implements,import,in,is,new,null,operator,part,rethrow,return,static,super,switch,this,throw,true,try,var,void,while,with,yield},
+  sensitive=true,
+  comment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  string=[b]",
+}
+
+\lstset{
+  basicstyle=\footnotesize\ttfamily,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  stringstyle=\color{red!60!black},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  stepnumber=1,
+  numbersep=6pt,
+  frame=single,
+  breaklines=true,
+  tabsize=2,
+  captionpos=b
+}
+
+\title{Rapport — Extrait (Tex page avec code)}
+\author{Projet PadelChampionship}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section*{Résumé}
+Cette page contient un court extrait de rapport et un exemple de bloc de code Dart (Flutter). Utilisez ce fichier comme modèle pour générer d'autres pages LaTeX du rapport.
+
+\vspace{6pt}
+
+\section*{Exemple de code (Dart)}
+\begin{lstlisting}[language=Dart,caption={Exemple: point d'entrée Flutter simple}]
+import 'package:flutter/material.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'PadelChampionship Demo',
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Accueil')),
+        body: const Center(child: Text('Bienvenue dans PadelChampionship')),
+      ),
+    );
+  }
+}
+\end{lstlisting}
+
+\vspace{10pt}
+
+\section*{Notes de compilation}
+Pour compiler ce document en PDF sur Windows (si \texttt{pdflatex} est installé) :
+\begin{verbatim}
+pdflatex RAPPORT_TEX.tex
+\end{verbatim}
+
+Sinon, utilisez un éditeur TeX (TeXstudio, Overleaf) ou \texttt{latexmk} :
+\begin{verbatim}
+latexmk -pdf RAPPORT_TEX.tex
+\end{verbatim}
+
+\end{document}

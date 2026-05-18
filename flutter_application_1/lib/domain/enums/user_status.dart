@@ -1,0 +1,4 @@
+enum UserStatus { 
+  actif, 
+  bloque 
+}
