@@ -5,87 +5,7 @@ class TournamentsServiceMock {
   static const _storageKey = 'mock.tournaments.v2';
   static const _statsKey   = 'mock.tournament_player_stats';
 
-  static final List<Map<String, dynamic>> _seedTournaments = [
-    {
-      'id': 1,
-      'nom': 'Tournoi Printemps',
-      'type': 'joueurs',
-      'date': DateTime.now().subtract(const Duration(days: 5)).toIso8601String(),
-      'joueurIds': [2, 3, 4, 5, 6, 7, 8, 9],
-      'equipeIds': [],
-      'maxParticipants': 8,
-      'complexeSportif': 'La Casa del Padel',
-      'terrainNumero': 2,
-      'matches': [
-        {
-          'id': 11,
-          'tour': 'Quart',
-          'joueur1Id': 2,
-          'joueur2Id': 3,
-          'vainqueurId': 2,
-          'complexeSportif': 'La Casa del Padel',
-          'terrainNumero': 1,
-          'heureDebut': '18:00',
-        },
-        {
-          'id': 12,
-          'tour': 'Quart',
-          'joueur1Id': 4,
-          'joueur2Id': 5,
-          'vainqueurId': 4,
-          'complexeSportif': 'La Casa del Padel',
-          'terrainNumero': 2,
-          'heureDebut': '19:00',
-        },
-        {
-          'id': 13,
-          'tour': 'Quart',
-          'joueur1Id': 6,
-          'joueur2Id': 7,
-          'complexeSportif': 'La Casa del Padel',
-          'terrainNumero': 3,
-          'heureDebut': '20:00',
-        },
-        {
-          'id': 14,
-          'tour': 'Quart',
-          'joueur1Id': 8,
-          'joueur2Id': 9,
-          'complexeSportif': 'La Casa del Padel',
-          'terrainNumero': 4,
-          'heureDebut': '21:00',
-        },
-        {
-          'id': 15,
-          'tour': 'Demi',
-          'joueur1Id': 2,
-          'joueur2Id': 4,
-          'complexeSportif': 'La Casa del Padel',
-          'terrainNumero': 1,
-          'heureDebut': '18:00',
-        },
-        {
-          'id': 16,
-          'tour': 'Demi',
-          'joueur1Id': 0,
-          'joueur2Id': 0,
-          'complexeSportif': 'La Casa del Padel',
-          'terrainNumero': 2,
-          'heureDebut': '20:00',
-        },
-        {
-          'id': 17,
-          'tour': 'Finale',
-          'joueur1Id': 0,
-          'joueur2Id': 0,
-          'vainqueurId': null,
-          'complexeSportif': 'La Casa del Padel',
-          'terrainNumero': 1,
-          'heureDebut': '20:00',
-        },
-      ],
-    },
-  ];
+  static final List<Map<String, dynamic>> _seedTournaments = [];
 
   // ── Round helpers ──────────────────────────────────────────────────────────
 
@@ -239,6 +159,9 @@ class TournamentsServiceMock {
     required int tournamentId,
     required int matchId,
     required int winnerId,
+    String? scoreSet1,
+    String? scoreSet2,
+    String? scoreSet3,
   }) async {
     await Future.delayed(const Duration(milliseconds: 120));
     final tournaments = await _loadTournamentMaps();
@@ -254,6 +177,9 @@ class TournamentsServiceMock {
     final mIndex = rawMatches.indexWhere((m) => m['id'] == matchId);
     if (mIndex == -1) return;
     rawMatches[mIndex]['vainqueurId'] = winnerId;
+    if (scoreSet1 != null) rawMatches[mIndex]['scoreSet1'] = scoreSet1;
+    if (scoreSet2 != null) rawMatches[mIndex]['scoreSet2'] = scoreSet2;
+    if (scoreSet3 != null) rawMatches[mIndex]['scoreSet3'] = scoreSet3;
 
     // Auto-advance: find position in current round
     final currentTour = rawMatches[mIndex]['tour'] as String;

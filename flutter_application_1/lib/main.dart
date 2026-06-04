@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'core/storage/token_storage.dart';
 import 'features/admin/admin_home_screen.dart';
 import 'features/auth/auth_gateway.dart';
 import 'features/player/player_home_screen.dart';
+import 'features/splash/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } catch (_) {}
+  }
   runApp(const PadelChampionshipApp());
 }
 
@@ -136,7 +142,7 @@ class PadelChampionshipApp extends StatelessWidget {
       title: 'Championnat Padel',
       debugShowCheckedModeBanner: false,
       theme: _buildTheme(),
-      home: const _AppEntryPoint(),
+      home: SplashScreen(nextScreen: const _AppEntryPoint()),
     );
   }
 }

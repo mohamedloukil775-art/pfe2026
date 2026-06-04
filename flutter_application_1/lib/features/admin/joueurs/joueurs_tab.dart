@@ -1,5 +1,4 @@
-﻿import 'dart:io';
-
+﻿import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -102,47 +101,45 @@ class _JoueursTabState extends State<JoueursTab> {
     required Color accent,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      width: 90,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 20, color: accent),
+            child: Icon(icon, size: 18, color: accent),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
             ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -196,11 +193,14 @@ class _JoueursTabState extends State<JoueursTab> {
 
   Widget _buildPlayerAvatar(AppUser player, {double radius = 28}) {
     final path = player.photoPath;
-    if (path != null && path.isNotEmpty && File(path).existsSync()) {
-      return CircleAvatar(
-        radius: radius,
-        backgroundImage: FileImage(File(path)),
-      );
+    if (path != null && path.isNotEmpty) {
+      ImageProvider? img;
+      if (path.startsWith('data:')) {
+        img = MemoryImage(base64Decode(path.split(',').last));
+      }
+      if (img != null) {
+        return CircleAvatar(radius: radius, backgroundImage: img);
+      }
     }
 
     return CircleAvatar(
@@ -365,11 +365,11 @@ class _JoueursTabState extends State<JoueursTab> {
   }
 
   Widget _buildPhotoPreview(String? path) {
-    if (path != null && path.isNotEmpty && File(path).existsSync()) {
+    if (path != null && path.isNotEmpty && path.startsWith('data:')) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Image.file(
-          File(path),
+        child: Image.memory(
+          base64Decode(path.split(',').last),
           width: 72,
           height: 72,
           fit: BoxFit.cover,
@@ -670,41 +670,46 @@ class _JoueursTabState extends State<JoueursTab> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        _buildHeroMetric(
-                          label: 'Total',
-                          value: totalPlayers.toString(),
-                          icon: Icons.groups_2_outlined,
-                          accent: const Color(0xFF58D6B0),
-                        ),
-                        _buildHeroMetric(
-                          label: 'Affichés',
-                          value: _filteredPlayers.length.toString(),
-                          icon: Icons.filter_alt_outlined,
-                          accent: const Color(0xFF5AA9FF),
-                        ),
-                        _buildHeroMetric(
-                          label: 'Actifs',
-                          value: activePlayers.toString(),
-                          icon: Icons.verified_user_outlined,
-                          accent: const Color(0xFFF59E0B),
-                        ),
-                        _buildHeroMetric(
-                          label: 'Bloqués',
-                          value: blockedPlayers.toString(),
-                          icon: Icons.lock_outline,
-                          accent: const Color(0xFFEF4444),
-                        ),
-                        _buildHeroMetric(
-                          label: 'Niveau moyen',
-                          value: averageLevel.toStringAsFixed(1),
-                          icon: Icons.stacked_line_chart_outlined,
-                          accent: const Color(0xFF8B5CF6),
-                        ),
-                      ],
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildHeroMetric(
+                            label: 'Total',
+                            value: totalPlayers.toString(),
+                            icon: Icons.groups_2_outlined,
+                            accent: const Color(0xFF58D6B0),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildHeroMetric(
+                            label: 'Affichés',
+                            value: _filteredPlayers.length.toString(),
+                            icon: Icons.filter_alt_outlined,
+                            accent: const Color(0xFF5AA9FF),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildHeroMetric(
+                            label: 'Actifs',
+                            value: activePlayers.toString(),
+                            icon: Icons.verified_user_outlined,
+                            accent: const Color(0xFFF59E0B),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildHeroMetric(
+                            label: 'Bloqués',
+                            value: blockedPlayers.toString(),
+                            icon: Icons.lock_outline,
+                            accent: const Color(0xFFEF4444),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildHeroMetric(
+                            label: 'Niveau moyen',
+                            value: averageLevel.toStringAsFixed(1),
+                            icon: Icons.stacked_line_chart_outlined,
+                            accent: const Color(0xFF8B5CF6),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -954,20 +959,6 @@ class _JoueursTabState extends State<JoueursTab> {
                                 successMessage: isBlocked
                                     ? 'Joueur débloqué'
                                     : 'Joueur bloqué',
-                              ),
-                      ),
-                      _buildPlayerAction(
-                        label: 'Supprimer',
-                        icon: Icons.delete_outline,
-                        onPressed: _isActionLoading
-                            ? null
-                            : () => _confirmAndRun(
-                                title: 'Supprimer joueur',
-                                message:
-                                    'Supprimer ${player.nom} ? Cette action est irréversible.',
-                                action: () =>
-                                    _playersService.deletePlayer(player.id),
-                                successMessage: 'Joueur supprimé',
                               ),
                       ),
                     ],

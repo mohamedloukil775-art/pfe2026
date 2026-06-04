@@ -18,3 +18,7 @@ public record AuthResponse(
     string Role,
     string Token
 );
+
+public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+public record UpdateNameRequest(string Nom);

@@ -1,28 +1,52 @@
 import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
 class MockPersistence {
-  static Future<SharedPreferences> _prefs() => SharedPreferences.getInstance();
+  static final _baseUrl = '${ApiConfig.storageUrl}';
+
+  static Future<String?> _load(String key) async {
+    try {
+      final res = await http
+          .get(Uri.parse('$_baseUrl/$key'))
+          .timeout(const Duration(seconds: 5));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        return data['value'] as String?;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _save(String key, String value) async {
+    try {
+      await http
+          .post(
+            Uri.parse('$_baseUrl/$key'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'value': value}),
+          )
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {}
+  }
 
   static Future<List<Map<String, dynamic>>> loadList(
     String key,
     List<Map<String, dynamic>> seed,
   ) async {
-    final prefs = await _prefs();
-    final raw = prefs.getString(key);
+    final raw = await _load(key);
     if (raw == null || raw.isEmpty) {
-      return seed.map((entry) => Map<String, dynamic>.from(entry)).toList();
+      return seed.map((e) => Map<String, dynamic>.from(e)).toList();
     }
-
     final decoded = jsonDecode(raw);
     if (decoded is! List) {
-      return seed.map((entry) => Map<String, dynamic>.from(entry)).toList();
+      return seed.map((e) => Map<String, dynamic>.from(e)).toList();
     }
-
     return decoded
         .whereType<Map>()
-        .map((entry) => Map<String, dynamic>.from(entry.cast<String, dynamic>()))
+        .map((e) => Map<String, dynamic>.from(e.cast<String, dynamic>()))
         .toList();
   }
 
@@ -30,25 +54,21 @@ class MockPersistence {
     String key,
     List<Map<String, dynamic>> value,
   ) async {
-    final prefs = await _prefs();
-    await prefs.setString(key, jsonEncode(value));
+    await _save(key, jsonEncode(value));
   }
 
   static Future<Map<String, dynamic>> loadObject(
     String key,
     Map<String, dynamic> seed,
   ) async {
-    final prefs = await _prefs();
-    final raw = prefs.getString(key);
+    final raw = await _load(key);
     if (raw == null || raw.isEmpty) {
       return Map<String, dynamic>.from(seed);
     }
-
     final decoded = jsonDecode(raw);
     if (decoded is! Map) {
       return Map<String, dynamic>.from(seed);
     }
-
     return Map<String, dynamic>.from(decoded.cast<String, dynamic>());
   }
 
@@ -56,7 +76,6 @@ class MockPersistence {
     String key,
     Map<String, dynamic> value,
   ) async {
-    final prefs = await _prefs();
-    await prefs.setString(key, jsonEncode(value));
+    await _save(key, jsonEncode(value));
   }
 }

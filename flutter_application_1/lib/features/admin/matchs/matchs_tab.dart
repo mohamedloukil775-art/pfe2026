@@ -117,6 +117,42 @@ class _MatchsTabState extends State<MatchsTab> {
     }
   }
 
+  static const List<String> _complexes = [
+    'Vamos Sport', 'La Casa del Padel', 'Le Padel Sfax', 'Just Padel',
+  ];
+
+  static const List<String> _terrains = [
+    'Terrain 1', 'Terrain 2', 'Terrain 3', 'Terrain 4',
+  ];
+
+  bool _sameHour(DateTime a, DateTime b) =>
+      a.year == b.year &&
+      a.month == b.month &&
+      a.day == b.day &&
+      a.hour == b.hour;
+
+  String? _checkConflict({
+    required int equipe1Id,
+    required int equipe2Id,
+    required String terrain,
+    required String complexe,
+    required DateTime date,
+  }) {
+    for (final m in _matches) {
+      if (!_sameHour(m.date, date)) continue;
+      if (m.terrain == terrain && m.complexeSportif == complexe) {
+        return 'Le $terrain (${complexe}) est déjà occupé à ${date.hour}h00.';
+      }
+      if (m.equipe1Id == equipe1Id || m.equipe2Id == equipe1Id) {
+        return '${_teamNameById(equipe1Id)} a déjà un match à ${date.hour}h00.';
+      }
+      if (m.equipe1Id == equipe2Id || m.equipe2Id == equipe2Id) {
+        return '${_teamNameById(equipe2Id)} a déjà un match à ${date.hour}h00.';
+      }
+    }
+    return null;
+  }
+
   String _teamNameById(int id) {
     for (final team in _teams) {
       if (team.id == id) return team.nom;
@@ -193,47 +229,45 @@ class _MatchsTabState extends State<MatchsTab> {
     required Color accent,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      width: 90,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 20, color: accent),
+            child: Icon(icon, size: 18, color: accent),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
             ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -252,14 +286,26 @@ class _MatchsTabState extends State<MatchsTab> {
     );
   }
 
-  String _formatDateTime(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    final day = local.day.toString().padLeft(2, '0');
-    final month = local.month.toString().padLeft(2, '0');
-    final year = local.year.toString().padLeft(4, '0');
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$day/$month/$year · $hour:$minute';
+  Widget _buildInfoTag(IconData icon, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildDateTimeBanner(DateTime dateTime) {
@@ -572,14 +618,15 @@ class _MatchsTabState extends State<MatchsTab> {
     }
 
     final formKey = GlobalKey<FormState>();
-    String terrain = '';
+    String? terrain;
+    String complexe = _complexes.first;
     int? equipe1Id;
     int? equipe2Id;
     DateTime selectedDate = DateTime.now().add(const Duration(hours: 1));
 
     final schedule =
         await showDialog<
-          ({int equipe1Id, int equipe2Id, String terrain, DateTime date})
+          ({int equipe1Id, int equipe2Id, String terrain, String complexe, DateTime date})
         >(
           context: context,
           builder: (context) {
@@ -681,17 +728,29 @@ class _MatchsTabState extends State<MatchsTab> {
                             },
                           ),
                           const SizedBox(height: 12),
-                          TextFormField(
+                          DropdownButtonFormField<String>(
+                            decoration: const InputDecoration(
+                              labelText: 'Centre sportif',
+                              prefixIcon: Icon(Icons.location_on_outlined),
+                            ),
+                            value: complexe,
+                            items: _complexes
+                                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                                .toList(),
+                            onChanged: (v) => setDialogState(() => complexe = v!),
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
                             decoration: const InputDecoration(
                               labelText: 'Terrain',
+                              prefixIcon: Icon(Icons.sports_tennis),
                             ),
-                            onChanged: (value) => terrain = value,
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Terrain requis';
-                              }
-                              return null;
-                            },
+                            value: terrain,
+                            items: _terrains
+                                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                                .toList(),
+                            onChanged: (value) => setDialogState(() => terrain = value),
+                            validator: (_) => terrain == null ? 'Choisir un terrain' : null,
                           ),
                           const SizedBox(height: 12),
                           _buildDateTimeBanner(selectedDate),
@@ -735,10 +794,28 @@ class _MatchsTabState extends State<MatchsTab> {
                                 return;
                               }
 
+                              final conflict = _checkConflict(
+                                equipe1Id: equipe1Id!,
+                                equipe2Id: equipe2Id!,
+                                terrain: terrain!,
+                                complexe: complexe,
+                                date: selectedDate,
+                              );
+                              if (conflict != null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(conflict),
+                                    backgroundColor: Colors.orange.shade800,
+                                  ),
+                                );
+                                return;
+                              }
+
                               Navigator.pop(context, (
                                 equipe1Id: equipe1Id!,
                                 equipe2Id: equipe2Id!,
-                                terrain: terrain.trim(),
+                                terrain: terrain!,
+                                complexe: complexe,
                                 date: selectedDate,
                               ));
                             },
@@ -757,6 +834,7 @@ class _MatchsTabState extends State<MatchsTab> {
       () => _matchesService.scheduleMatch(
         date: schedule.date,
         terrain: schedule.terrain,
+        complexeSportif: schedule.complexe,
         equipe1Id: schedule.equipe1Id,
         equipe2Id: schedule.equipe2Id,
       ),
@@ -845,36 +923,6 @@ class _MatchsTabState extends State<MatchsTab> {
     );
   }
 
-  Future<void> _confirmDeleteMatch(MatchEntry match) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Supprimer match'),
-          content: Text(
-            'Supprimer le match ${_teamName(match, true)} vs ${_teamName(match, false)} ?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Annuler'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Supprimer'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) return;
-
-    await _runAction(
-      () => _matchesService.deleteMatch(match.id),
-      successMessage: 'Match supprime',
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -983,35 +1031,39 @@ class _MatchsTabState extends State<MatchsTab> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        _buildHeroMetric(
-                          label: 'Total',
-                          value: totalMatches.toString(),
-                          icon: Icons.sports_tennis,
-                          accent: const Color(0xFF58D6B0),
-                        ),
-                        _buildHeroMetric(
-                          label: 'Programmés',
-                          value: scheduledMatches.toString(),
-                          icon: Icons.schedule_outlined,
-                          accent: const Color(0xFF5AA9FF),
-                        ),
-                        _buildHeroMetric(
-                          label: 'Résultats saisis',
-                          value: enteredResults.toString(),
-                          icon: Icons.edit_note_outlined,
-                          accent: const Color(0xFFF59E0B),
-                        ),
-                        _buildHeroMetric(
-                          label: 'Validés',
-                          value: validatedMatches.toString(),
-                          icon: Icons.verified_outlined,
-                          accent: const Color(0xFF8B5CF6),
-                        ),
-                      ],
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildHeroMetric(
+                            label: 'Total',
+                            value: totalMatches.toString(),
+                            icon: Icons.sports_tennis,
+                            accent: const Color(0xFF58D6B0),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildHeroMetric(
+                            label: 'Programmés',
+                            value: scheduledMatches.toString(),
+                            icon: Icons.schedule_outlined,
+                            accent: const Color(0xFF5AA9FF),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildHeroMetric(
+                            label: 'Résultats saisis',
+                            value: enteredResults.toString(),
+                            icon: Icons.edit_note_outlined,
+                            accent: const Color(0xFFF59E0B),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildHeroMetric(
+                            label: 'Validés',
+                            value: validatedMatches.toString(),
+                            icon: Icons.verified_outlined,
+                            accent: const Color(0xFF8B5CF6),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -1133,7 +1185,12 @@ class _MatchsTabState extends State<MatchsTab> {
 
           final displayScore = match.scoreValide != null
               ? '${match.scoreValide!.setsEquipe1} - ${match.scoreValide!.setsEquipe2}'
-              : 'Score non renseigne';
+              : 'Non renseigné';
+          final local = match.date.toLocal();
+          final dateStr =
+              '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year}';
+          final timeStr =
+              '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
 
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -1173,23 +1230,29 @@ class _MatchsTabState extends State<MatchsTab> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _buildHeroMetric(
-                        label: 'Terrain',
-                        value: match.terrain,
-                        icon: Icons.stadium_outlined,
-                        accent: const Color(0xFF58D6B0),
+                      _buildInfoTag(
+                        Icons.stadium_outlined,
+                        match.terrain,
+                        const Color(0xFF58D6B0),
                       ),
-                      _buildHeroMetric(
-                        label: 'Date',
-                        value: _formatDateTime(match.date),
-                        icon: Icons.calendar_month_outlined,
-                        accent: const Color(0xFF5AA9FF),
+                      _buildInfoTag(
+                        Icons.calendar_today_outlined,
+                        dateStr,
+                        const Color(0xFF5AA9FF),
                       ),
-                      _buildHeroMetric(
-                        label: 'Score',
-                        value: displayScore,
-                        icon: Icons.sports_score_outlined,
-                        accent: const Color(0xFFF59E0B),
+                      _buildInfoTag(
+                        Icons.access_time_outlined,
+                        timeStr,
+                        const Color(0xFF5AA9FF),
+                      ),
+                      _buildInfoTag(
+                        Icons.sports_score_outlined,
+                        match.scoreValide != null
+                            ? 'Score : $displayScore'
+                            : displayScore,
+                        match.scoreValide != null
+                            ? const Color(0xFF22C55E)
+                            : const Color(0xFFF59E0B),
                       ),
                     ],
                   ),
@@ -1198,21 +1261,14 @@ class _MatchsTabState extends State<MatchsTab> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      if (status == MatchStatus.resultatSaisi)
+                      if (status != MatchStatus.valide)
                         _buildActionButton(
-                          label: 'Valider score',
-                          icon: Icons.verified,
+                          label: 'Saisir résultat',
+                          icon: Icons.sports_score,
                           onPressed: _isActionLoading
                               ? null
                               : () => _showValidateScoreDialog(match),
                         ),
-                      _buildActionButton(
-                        label: 'Supprimer',
-                        icon: Icons.delete_outline,
-                        onPressed: _isActionLoading
-                            ? null
-                            : () => _confirmDeleteMatch(match),
-                      ),
                     ],
                   ),
                 ],

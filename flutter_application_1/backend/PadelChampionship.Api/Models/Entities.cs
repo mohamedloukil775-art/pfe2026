@@ -113,3 +113,9 @@ public class TournamentMatch
     public int TournamentId { get; set; }
     public Tournament Tournament { get; set; } = null!;
 }
+
+public class StorageEntry
+{
+    public string Key { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
+}

@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ import '../../domain/domain.dart';
 import '../../core/storage/mock_persistence.dart';
 import '../auth/login_screen.dart';
 import 'mes_matchs_screen.dart';
+import 'mon_equipe_screen.dart';
 import 'player_profile_screen.dart';
 
 class PlayerHomeScreen extends StatefulWidget {
@@ -26,8 +27,10 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
 
   final _authService = AuthService();
   final PlayersServiceMock _playersService = PlayersServiceMock();
+  final TeamsServiceMock _teamsService = TeamsServiceMock();
 
   AppUser? _player;
+  List<int> _myTeamIds = [];
   bool _isLoading = true;
   int _selectedIndex = 0;
 
@@ -40,16 +43,29 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
   Future<void> _loadPlayer() async {
     setState(() => _isLoading = true);
     try {
-      final all = await _playersService.getAllPlayers();
+      final results = await Future.wait([
+        _playersService.getAllPlayers(),
+        _teamsService.getAllTeams(),
+      ]);
+      final allPlayers = results[0] as List<AppUser>;
+      final allTeams = results[1] as List<Team>;
+
       AppUser? p;
       try {
-        p = all.firstWhere((e) => e.id == widget.userId);
+        p = allPlayers.firstWhere((e) => e.id == widget.userId);
       } catch (_) {
         p = null;
       }
+
+      final myTeamIds = allTeams
+          .where((t) => t.playerIds.contains(widget.userId))
+          .map((t) => t.id)
+          .toList();
+
       if (!mounted) return;
       setState(() {
         _player = p;
+        _myTeamIds = myTeamIds;
         _isLoading = false;
       });
     } catch (_) {
@@ -119,10 +135,16 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
           SafeArea(
             bottom: false,
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: _selectedIndex == 0
-                  ? _buildHomeTab()
-                  : PlayerProfileScreen(currentUser: _player!),
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: child,
+              ),
+              child: switch (_selectedIndex) {
+                0 => KeyedSubtree(key: const ValueKey(0), child: _buildHomeTab()),
+                1 => KeyedSubtree(key: const ValueKey(1), child: MonEquipeScreen(userId: widget.userId)),
+                _ => KeyedSubtree(key: const ValueKey(2), child: PlayerProfileScreen(currentUser: _player!)),
+              },
             ),
           ),
         ],
@@ -137,7 +159,7 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
       children: [
         _buildHeader(),
         Expanded(
-          child: MesMatchsScreen(userId: widget.userId, teamId: _player?.teamId),
+          child: MesMatchsScreen(userId: widget.userId, teamIds: _myTeamIds),
         ),
       ],
     );
@@ -303,6 +325,10 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
             label: 'Accueil',
           ),
           NavigationDestination(
+            icon: Icon(Icons.shield_rounded),
+            label: 'Mon Équipe',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.person_rounded),
             label: 'Profil',
           ),
@@ -341,15 +367,17 @@ class _PlayerHomeScreenState extends State<PlayerHomeScreen> {
 
   ImageProvider? _getAvatarImage() {
     final path = _player?.photoPath;
-    if (path != null && path.isNotEmpty && File(path).existsSync()) {
-      return FileImage(File(path));
+    if (path == null || path.isEmpty) return null;
+    if (path.startsWith('data:')) {
+      final base64Str = path.split(',').last;
+      return MemoryImage(base64Decode(base64Str));
     }
-    return null;
+    return NetworkImage(path);
   }
 
   Widget? _getAvatarChild() {
     final path = _player?.photoPath;
-    if (path != null && path.isNotEmpty && File(path).existsSync()) return null;
+    if (path != null && path.isNotEmpty) return null;
     final initial = _player?.nom.isNotEmpty == true ? _player!.nom[0].toUpperCase() : '?';
     return Text(
       initial,

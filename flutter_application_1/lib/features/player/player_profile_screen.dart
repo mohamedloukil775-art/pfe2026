@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 
-import '../../data/services/firebase_auth_service.dart';
-import '../../data/services/firestore_service.dart';
-import '../../data/services/firebase_storage_service.dart';
+import '../../data/services/auth_service_mock.dart';
+import '../../data/services/players_service_mock.dart';
 import '../../domain/models/app_user.dart';
 import '../../domain/enums/user_role.dart';
 
@@ -22,9 +22,8 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
   static const _darkBg = Color(0xFF080C14);
   static const _cardBg = Color(0xFF0F1621);
 
-  late final FirebaseAuthService _authService;
-  late final FirestoreService _firestoreService;
-  late final FirebaseStorageService _storageService;
+  final _authServiceMock = AuthServiceMock();
+  final _playersServiceMock = PlayersServiceMock();
 
   late final TextEditingController _nameController;
   late final TextEditingController _currentPasswordController;
@@ -37,15 +36,12 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
 
-  File? _selectedImage;
+  Uint8List? _selectedImageBytes;
   String? _profileImageUrl;
 
   @override
   void initState() {
     super.initState();
-    _authService = FirebaseAuthService();
-    _firestoreService = FirestoreService();
-    _storageService = FirebaseStorageService();
     _nameController = TextEditingController(text: widget.currentUser.nom);
     _currentPasswordController = TextEditingController();
     _newPasswordController = TextEditingController();
@@ -69,7 +65,10 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
         imageQuality: 85,
       );
       if (pickedFile != null) {
-        setState(() => _selectedImage = File(pickedFile.path));
+        final bytes = await pickedFile.readAsBytes();
+        setState(() {
+          _selectedImageBytes = bytes;
+        });
       }
     } catch (e) {
       _showError('Erreur: $e');
@@ -77,21 +76,19 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
   }
 
   Future<void> _uploadProfileImage() async {
-    if (_selectedImage == null) return;
+    if (_selectedImageBytes == null) return;
     setState(() => _isLoading = true);
     try {
-      final url = await _storageService.uploadProfileImage(
-        imageFile: _selectedImage!,
-        userEmail: widget.currentUser.email,
-      );
-      await _authService.updateProfilePhoto(url);
-      await _firestoreService.updateUserProfile(
+      final base64Image = 'data:image/jpeg;base64,${base64Encode(_selectedImageBytes!)}';
+      await _authServiceMock.updatePhotoPath(
         email: widget.currentUser.email,
-        photoPath: url,
+        photoPath: base64Image,
       );
+      await _playersServiceMock.updatePlayerPhoto(widget.currentUser.id, base64Image);
+      widget.currentUser.photoPath = base64Image;
       setState(() {
-        _profileImageUrl = url;
-        _selectedImage = null;
+        _profileImageUrl = base64Image;
+        _selectedImageBytes = null;
       });
       _showSuccess('Photo mise à jour !');
     } catch (e) {
@@ -109,11 +106,11 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
     }
     setState(() => _isLoading = true);
     try {
-      await _authService.updateDisplayName(newName);
-      await _firestoreService.updateUserProfile(
+      await _authServiceMock.updateName(
         email: widget.currentUser.email,
-        nom: newName,
+        newName: newName,
       );
+      await _playersServiceMock.updatePlayerName(widget.currentUser.id, newName);
       _showSuccess('Nom mis à jour !');
     } catch (e) {
       _showError(e.toString());
@@ -136,7 +133,8 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
     }
     setState(() => _isLoading = true);
     try {
-      await _authService.changePassword(
+      await _authServiceMock.changePassword(
+        email: widget.currentUser.email,
         currentPassword: current,
         newPassword: newPass,
       );
@@ -230,10 +228,15 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
 
   Widget _buildAvatarSection() {
     ImageProvider? imageProvider;
-    if (_selectedImage != null) {
-      imageProvider = FileImage(_selectedImage!);
+    if (_selectedImageBytes != null) {
+      imageProvider = MemoryImage(_selectedImageBytes!);
     } else if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
-      imageProvider = NetworkImage(_profileImageUrl!);
+      if (_profileImageUrl!.startsWith('data:')) {
+        final base64Str = _profileImageUrl!.split(',').last;
+        imageProvider = MemoryImage(base64Decode(base64Str));
+      } else {
+        imageProvider = NetworkImage(_profileImageUrl!);
+      }
     }
 
     final initial = widget.currentUser.nom.isNotEmpty
@@ -311,7 +314,7 @@ class _PlayerProfileScreenState extends State<PlayerProfileScreen> {
               fontSize: 13,
             ),
           ),
-          if (_selectedImage != null) ...[
+          if (_selectedImageBytes != null) ...[
             const SizedBox(height: 14),
             ElevatedButton.icon(
               onPressed: _isLoading ? null : _uploadProfileImage,

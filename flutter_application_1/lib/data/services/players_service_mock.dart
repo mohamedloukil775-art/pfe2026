@@ -22,94 +22,6 @@ class PlayersServiceMock {
       'clubId': 1,
       'photoPath': null,
     },
-    {
-      'id': 2,
-      'nom': 'Ali Ben',
-      'email': 'ali@padel.com',
-      'motDePasse': 'Player123!',
-      'role': 'Joueur',
-      'niveau': 5,
-      'statut': 'Actif',
-      'clubId': 1,
-      'photoPath': null,
-    },
-    {
-      'id': 3,
-      'nom': 'Sana',
-      'email': 'sana@padel.com',
-      'motDePasse': '',
-      'role': 'Joueur',
-      'niveau': 4,
-      'statut': 'Actif',
-      'clubId': 1,
-      'photoPath': null,
-    },
-    {
-      'id': 4,
-      'nom': 'Yassine',
-      'email': 'yassine@padel.com',
-      'motDePasse': '',
-      'role': 'Joueur',
-      'niveau': 6,
-      'statut': 'Actif',
-      'clubId': 1,
-      'photoPath': null,
-    },
-    {
-      'id': 5,
-      'nom': 'Nour',
-      'email': 'nour@padel.com',
-      'motDePasse': '',
-      'role': 'Joueur',
-      'niveau': 5,
-      'statut': 'Actif',
-      'clubId': 1,
-      'photoPath': null,
-    },
-    {
-      'id': 6,
-      'nom': 'Amir',
-      'email': 'amir@padel.com',
-      'motDePasse': '',
-      'role': 'Joueur',
-      'niveau': 7,
-      'statut': 'Actif',
-      'clubId': 1,
-      'photoPath': null,
-    },
-    {
-      'id': 7,
-      'nom': 'Lina',
-      'email': 'lina@padel.com',
-      'motDePasse': '',
-      'role': 'Joueur',
-      'niveau': 5,
-      'statut': 'Actif',
-      'clubId': 1,
-      'photoPath': null,
-    },
-    {
-      'id': 8,
-      'nom': 'Omar',
-      'email': 'omar@padel.com',
-      'motDePasse': '',
-      'role': 'Joueur',
-      'niveau': 6,
-      'statut': 'Actif',
-      'clubId': 1,
-      'photoPath': null,
-    },
-    {
-      'id': 9,
-      'nom': 'Rania',
-      'email': 'rania@padel.com',
-      'motDePasse': '',
-      'role': 'Joueur',
-      'niveau': 4,
-      'statut': 'Actif',
-      'clubId': 1,
-      'photoPath': null,
-    },
   ];
 
   static final Map<String, List<Map<String, dynamic>>> _seedHistory = {
@@ -166,7 +78,10 @@ class PlayersServiceMock {
 
     await Future.delayed(const Duration(milliseconds: 300));
     final players = (await _loadPlayerMaps()).map(AppUser.fromJson).toList();
-    RequestCache.set('players:list', players);
+    // Only cache if we got real data from the backend (not just the seed admin)
+    if (players.length > 1) {
+      RequestCache.set('players:list', players, ttl: const Duration(seconds: 5));
+    }
     return players;
   }
 
@@ -212,6 +127,25 @@ class PlayersServiceMock {
     RequestCache.invalidate('players:list');
     RequestCache.invalidate('players:stats');
     return AppUser.fromJson(map);
+  }
+
+  Future<void> updatePlayerPhoto(int playerId, String photoPath) async {
+    final players = await _loadPlayerMaps();
+    final idx = players.indexWhere((m) => m['id'] == playerId);
+    if (idx == -1) throw ApiException('Joueur non trouvé');
+    players[idx]['photoPath'] = photoPath;
+    await _savePlayerMaps(players);
+    RequestCache.invalidate('players:list');
+  }
+
+  Future<void> updatePlayerName(int playerId, String newName) async {
+    final players = await _loadPlayerMaps();
+    final idx = players.indexWhere((m) => m['id'] == playerId);
+    if (idx == -1) throw ApiException('Joueur non trouvé');
+    players[idx]['nom'] = newName;
+    await _savePlayerMaps(players);
+    RequestCache.invalidate('players:list');
+    RequestCache.invalidate('players:stats');
   }
 
   Future<void> updatePlayerLevel(int playerId, int newLevel) async {
@@ -286,7 +220,7 @@ class PlayersServiceMock {
     RequestCache.invalidate('players:list');
   }
 
-  Future<PlayerStats> getPlayerStats(int playerId, {int? teamId}) async {
+  Future<PlayerStats> getPlayerStats(int playerId, {List<int> teamIds = const []}) async {
     await Future.delayed(const Duration(milliseconds: 150));
     final players = await _loadPlayerMaps();
     final player = players.firstWhere(
@@ -294,7 +228,7 @@ class PlayersServiceMock {
       orElse: () => throw ApiException('Joueur non trouvé'),
     );
 
-    final matches = await MatchesServiceMock().getMyMatches(teamId: teamId);
+    final matches = await MatchesServiceMock().getMyMatches(teamIds: teamIds);
     final completedMatches = matches.where((match) => match.status != MatchStatus.programme).toList();
     final upcomingMatches = matches.where((match) => match.status == MatchStatus.programme).toList();
 

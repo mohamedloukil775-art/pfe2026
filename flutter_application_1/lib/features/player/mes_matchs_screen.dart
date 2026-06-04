@@ -6,10 +6,10 @@ import '../../domain/domain.dart';
 enum MatchViewFilter { all, upcoming, history }
 
 class MesMatchsScreen extends StatefulWidget {
-  const MesMatchsScreen({super.key, required this.userId, this.teamId});
+  const MesMatchsScreen({super.key, required this.userId, this.teamIds = const []});
 
   final int userId;
-  final int? teamId;
+  final List<int> teamIds;
 
   @override
   State<MesMatchsScreen> createState() => _MesMatchsScreenState();
@@ -36,6 +36,8 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
   bool _isActionLoading = false;
   String? _error;
   MatchViewFilter _viewFilter = MatchViewFilter.all;
+  String _historySearch = '';
+  String _historyResultFilter = 'Tous';
 
   @override
   void initState() {
@@ -46,7 +48,8 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
   @override
   void didUpdateWidget(covariant MesMatchsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.teamId != widget.teamId) {
+    if (oldWidget.teamIds.length != widget.teamIds.length ||
+        !oldWidget.teamIds.every((id) => widget.teamIds.contains(id))) {
       _loadData();
     }
   }
@@ -58,13 +61,12 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
     });
 
     try {
-      final teamIds = widget.teamId != null ? [widget.teamId!] : <int>[];
       final results = await Future.wait([
-        _matchesService.getMyMatches(teamId: widget.teamId),
+        _matchesService.getMyMatches(teamIds: widget.teamIds),
         _standingsService.getStandings(),
-        _playersService.getPlayerStats(widget.userId, teamId: widget.teamId),
+        _playersService.getPlayerStats(widget.userId, teamIds: widget.teamIds),
         _playersService.getLevelHistory(widget.userId),
-        _tournamentService.getTournamentsForPlayer(widget.userId, teamIds: teamIds),
+        _tournamentService.getTournamentsForPlayer(widget.userId, teamIds: widget.teamIds),
         _playersService.getAllPlayers(),
         _teamsService.getAllTeams(),
       ]);
@@ -120,6 +122,44 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
 
   List<MatchEntry> get _historyMatches =>
       _myMatches.where((m) => m.status != MatchStatus.programme).toList();
+
+  List<MatchEntry> get _filteredHistoryMatches {
+    var list = _historyMatches;
+
+    // Filtre par résultat
+    if (_historyResultFilter == 'Victoires') {
+      list = list.where((m) {
+        final s = m.scoreValide;
+        if (s == null || m.myEquipeId == null) return false;
+        final isEq1 = m.myEquipeId == m.equipe1Id;
+        final my = isEq1 ? s.setsEquipe1 : s.setsEquipe2;
+        final opp = isEq1 ? s.setsEquipe2 : s.setsEquipe1;
+        return my > opp;
+      }).toList();
+    } else if (_historyResultFilter == 'Défaites') {
+      list = list.where((m) {
+        final s = m.scoreValide;
+        if (s == null || m.myEquipeId == null) return false;
+        final isEq1 = m.myEquipeId == m.equipe1Id;
+        final my = isEq1 ? s.setsEquipe1 : s.setsEquipe2;
+        final opp = isEq1 ? s.setsEquipe2 : s.setsEquipe1;
+        return my < opp;
+      }).toList();
+    }
+
+    // Filtre par recherche (nom équipe ou terrain)
+    if (_historySearch.trim().isNotEmpty) {
+      final q = _historySearch.trim().toLowerCase();
+      list = list.where((m) {
+        final eq1 = _teamName(m, true).toLowerCase();
+        final eq2 = _teamName(m, false).toLowerCase();
+        final terrain = m.terrain.toLowerCase();
+        return eq1.contains(q) || eq2.contains(q) || terrain.contains(q);
+      }).toList();
+    }
+
+    return list;
+  }
 
   String _statusLabel(MatchStatus status) {
     switch (status) {
@@ -227,16 +267,6 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
 
   // ── Tournament helpers ──────────────────────────────────────────────────────
 
-  List<TournamentMatch> _getPlayerMatchesInTournament(Tournament t) {
-    if (t.isTeamMode) {
-      final tid = widget.teamId;
-      if (tid == null) return [];
-      return t.matches.where((m) => m.joueur1 == tid || m.joueur2 == tid).toList();
-    }
-    return t.matches
-        .where((m) => m.joueur1 == widget.userId || m.joueur2 == widget.userId)
-        .toList();
-  }
 
   String _participantName(Tournament t, int id) {
     if (id == 0) return '?';
@@ -272,8 +302,20 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
   }
 
   Widget _buildTournamentCard(Tournament t) {
-    final myMatches = _getPlayerMatchesInTournament(t);
     const gold = Color(0xFFFFB800);
+    // Group matches by round for display
+    final rounds = <TournamentRound, List<TournamentMatch>>{};
+    for (final m in t.matches) {
+      rounds.putIfAbsent(m.round, () => []).add(m);
+    }
+    final roundOrder = [
+      TournamentRound.seizieme,
+      TournamentRound.huitieme,
+      TournamentRound.quart,
+      TournamentRound.demi,
+      TournamentRound.finale,
+    ];
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -285,6 +327,7 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(children: [
             const Icon(Icons.emoji_events_rounded, color: gold, size: 18),
             const SizedBox(width: 8),
@@ -311,86 +354,154 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
               ),
             ),
           ]),
-          const SizedBox(height: 10),
-          if (myMatches.isEmpty)
-            Text('Pas encore de matchs',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4), fontSize: 13))
+          const SizedBox(height: 12),
+          if (t.matches.isEmpty)
+            Text('Tableau non encore généré',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13))
           else
-            ...myMatches.map((m) => _buildTournamentMatchRow(t, m)),
+            ...roundOrder
+                .where((r) => rounds.containsKey(r))
+                .expand((r) => [
+                  // Round title
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 4),
+                    child: Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: gold.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(_roundLabel(r),
+                            style: const TextStyle(
+                                color: gold, fontSize: 10, fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.08))),
+                    ]),
+                  ),
+                  ...rounds[r]!.map((m) => _buildTournamentMatchRow(t, m)),
+                ]),
         ],
       ),
     );
   }
 
   Widget _buildTournamentMatchRow(Tournament t, TournamentMatch m) {
-    final myId = t.isTeamMode ? (widget.teamId ?? widget.userId) : widget.userId;
-    final opponentId = m.joueur1 == myId ? m.joueur2 : m.joueur1;
+    // Determine if this player/team is in this match
+    final isMyMatch = t.isTeamMode
+        ? widget.teamIds.any((tid) => m.joueur1 == tid || m.joueur2 == tid)
+        : (m.joueur1 == widget.userId || m.joueur2 == widget.userId);
+
+    final myId = t.isTeamMode
+        ? (widget.teamIds.firstWhere(
+            (tid) => m.joueur1 == tid || m.joueur2 == tid,
+            orElse: () => -1,
+          ))
+        : widget.userId;
     final hasResult = m.vainqueur != null && m.vainqueur! > 0;
-    final iWon = hasResult && m.vainqueur == myId;
+    final iWon = isMyMatch && hasResult && m.vainqueur == myId;
+    final iLost = isMyMatch && hasResult && m.vainqueur != myId;
+
+    final p1Name = _participantName(t, m.joueur1);
+    final p2Name = _participantName(t, m.joueur2);
+    final winnerName = hasResult ? _participantName(t, m.vainqueur!) : null;
+
+    Color borderColor = Colors.white.withValues(alpha: 0.08);
+    Color bgColor = Colors.white.withValues(alpha: 0.03);
+    if (isMyMatch) {
+      if (iWon)        { bgColor = Colors.green.withValues(alpha: 0.07); borderColor = Colors.green.withValues(alpha: 0.30); }
+      else if (iLost)  { bgColor = Colors.red.withValues(alpha: 0.07);   borderColor = Colors.red.withValues(alpha: 0.30); }
+      else             { bgColor = _lime.withValues(alpha: 0.05);         borderColor = _lime.withValues(alpha: 0.25); }
+    }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: iWon
-            ? Colors.green.withValues(alpha: 0.08)
-            : (hasResult
-                ? Colors.red.withValues(alpha: 0.08)
-                : Colors.white.withValues(alpha: 0.04)),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: iWon
-              ? Colors.green.withValues(alpha: 0.25)
-              : (hasResult
-                  ? Colors.red.withValues(alpha: 0.25)
-                  : Colors.white.withValues(alpha: 0.08)),
-        ),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
       ),
-      child: Row(children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFB800).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Ligne 1 : heure · terrain · complexe ──────────────────────
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              _TournamentInfoChip(
+                icon: Icons.access_time_rounded,
+                label: m.heureDebut,
+                color: const Color(0xFF5AA9FF),
+              ),
+              _TournamentInfoChip(
+                icon: Icons.stadium_outlined,
+                label: 'Terrain ${m.terrainNumero}',
+                color: const Color(0xFF58D6B0),
+              ),
+              _TournamentInfoChip(
+                icon: Icons.location_on_outlined,
+                label: m.complexeSportif,
+                color: const Color(0xFFF59E0B),
+              ),
+              if (isMyMatch)
+                _TournamentInfoChip(
+                  icon: Icons.person_pin_outlined,
+                  label: 'Mon match',
+                  color: _lime,
+                ),
+            ],
           ),
-          child: Text(_roundLabel(m.round),
-              style: const TextStyle(
-                  color: Color(0xFFFFB800), fontSize: 10, fontWeight: FontWeight.w700)),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            'vs ${_participantName(t, opponentId)}',
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        const SizedBox(width: 8),
-        if (hasResult)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: iWon
-                  ? Colors.green.withValues(alpha: 0.2)
-                  : Colors.red.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8),
+          const SizedBox(height: 8),
+          // ── Ligne 2 : participants avec scores ────────────────────────
+          _buildScoreTable(m, p1Name, p2Name),
+          // ── Ligne 3 : résultat ────────────────────────────────────────
+          if (hasResult) ...[
+            const SizedBox(height: 6),
+            Row(children: [
+              const Icon(Icons.emoji_events_outlined, color: Color(0xFFFFB800), size: 13),
+              const SizedBox(width: 4),
+              Text('Qualifié : $winnerName',
+                  style: const TextStyle(
+                      color: Color(0xFFFFB800), fontSize: 11.5, fontWeight: FontWeight.w700)),
+              if (isMyMatch) ...[
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: iWon
+                        ? Colors.green.withValues(alpha: 0.2)
+                        : Colors.red.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    iWon ? 'Victoire' : 'Défaite',
+                    style: TextStyle(
+                        color: iWon ? Colors.green : Colors.red,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11),
+                  ),
+                ),
+              ],
+            ]),
+          ] else if (m.joueur1 > 0 && m.joueur2 > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Text('Résultat en attente',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.35), fontSize: 11)),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Text('En attente du tour précédent',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.25), fontSize: 11)),
             ),
-            child: Text(
-              iWon ? 'V' : 'D',
-              style: TextStyle(
-                  color: iWon ? Colors.green : Colors.red,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13),
-            ),
-          )
-        else
-          Text(
-            opponentId == 0 ? '...' : 'À venir',
-            style:
-                TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11),
-          ),
-      ]),
+        ],
+      ),
     );
   }
 
@@ -426,6 +537,108 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildScoreTable(TournamentMatch m, String p1Name, String p2Name) {
+    // Parse set scores: "6-4" → j1=6, j2=4
+    List<(int, int)> sets = [];
+    for (final s in [m.scoreSet1, m.scoreSet2, m.scoreSet3]) {
+      if (s == null) continue;
+      final parts = s.split('-');
+      final a = int.tryParse(parts.firstOrNull ?? '');
+      final b = int.tryParse(parts.lastOrNull ?? '');
+      if (a != null && b != null) sets.add((a, b));
+    }
+
+    final p1IsWinner = m.vainqueur == m.joueur1;
+    final p2IsWinner = m.vainqueur == m.joueur2;
+    const winColor = Color(0xFF22C55E);
+
+    Widget nameText(String name, bool isWinner) => Expanded(
+      child: Text(
+        name,
+        style: TextStyle(
+          color: isWinner ? winColor : Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 12.5,
+        ),
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+
+    Widget setScore(int score, bool isWinner) => Container(
+      width: 26,
+      height: 26,
+      margin: const EdgeInsets.only(left: 4),
+      decoration: BoxDecoration(
+        color: isWinner
+            ? winColor.withValues(alpha: 0.15)
+            : Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: isWinner
+              ? winColor.withValues(alpha: 0.4)
+              : Colors.white.withValues(alpha: 0.10),
+        ),
+      ),
+      child: Center(
+        child: Text(
+          '$score',
+          style: TextStyle(
+            color: isWinner ? winColor : Colors.white.withValues(alpha: 0.7),
+            fontWeight: FontWeight.w800,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Player 1 row
+        Row(children: [
+          if (p1IsWinner) const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Icon(Icons.emoji_events_outlined, color: Color(0xFFFFB800), size: 13),
+          ),
+          nameText(m.joueur1 > 0 ? p1Name : '?', p1IsWinner),
+          if (sets.isNotEmpty)
+            ...sets.asMap().entries.map((e) {
+              final p1s = e.value.$1;
+              final p2s = e.value.$2;
+              return setScore(p1s, p1s > p2s);
+            }),
+        ]),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Divider(height: 1, color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        // Player 2 row
+        Row(children: [
+          if (p2IsWinner) const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Icon(Icons.emoji_events_outlined, color: Color(0xFFFFB800), size: 13),
+          ),
+          nameText(m.joueur2 > 0 ? p2Name : '?', p2IsWinner),
+          if (sets.isNotEmpty)
+            ...sets.asMap().entries.map((e) {
+              final p1s = e.value.$1;
+              final p2s = e.value.$2;
+              return setScore(p2s, p2s > p1s);
+            }),
+        ]),
+        if (sets.isEmpty && m.joueur1 > 0 && m.joueur2 > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              m.vainqueur != null ? 'Résultat enregistré' : 'Score non encore saisi',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.35), fontSize: 10.5),
+            ),
+          ),
       ],
     );
   }
@@ -724,6 +937,79 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
     );
   }
 
+  Widget _buildHistoryFilters() {
+    const lime = Color(0xFFC8F000);
+    const cardBg = Color(0xFF0F1621);
+    final results = ['Tous', 'Victoires', 'Défaites'];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Barre de recherche
+        Container(
+          height: 42,
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: TextField(
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Rechercher une équipe, terrain...',
+              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 13),
+              prefixIcon: Icon(Icons.search_rounded, color: lime.withValues(alpha: 0.6), size: 18),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              suffixIcon: _historySearch.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(Icons.clear_rounded, color: Colors.white.withValues(alpha: 0.3), size: 16),
+                      onPressed: () => setState(() => _historySearch = ''),
+                    )
+                  : null,
+            ),
+            onChanged: (v) => setState(() => _historySearch = v),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Chips de filtre résultat
+        Row(
+          children: results.map((label) {
+            final selected = _historyResultFilter == label;
+            Color chipColor = Colors.white.withValues(alpha: 0.4);
+            if (label == 'Victoires') chipColor = lime;
+            if (label == 'Défaites') chipColor = const Color(0xFFFF4757);
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () => setState(() => _historyResultFilter = label),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: selected ? chipColor.withValues(alpha: 0.15) : cardBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: selected ? chipColor : Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: selected ? chipColor : Colors.white.withValues(alpha: 0.4),
+                      fontSize: 12,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMatchCard(MatchEntry match, {bool allowSubmit = false}) {
     final displayScore = match.scoreValide != null
         ? '${match.scoreValide!.setsEquipe1} - ${match.scoreValide!.setsEquipe2}'
@@ -939,16 +1225,31 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
           Row(
             children: [
               Expanded(
-                child: _StatCard(
-                  title: 'Victoires',
-                  value: '${_stats?.victoires ?? 0}',
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _viewFilter = MatchViewFilter.history;
+                    _historyResultFilter = 'Victoires';
+                  }),
+                  child: _StatCard(
+                    title: 'Victoires',
+                    value: '${_stats?.victoires ?? 0}',
+                    tappable: true,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _StatCard(
-                  title: 'Taux',
-                  value: '${((_stats?.tauxVictoire ?? 0) * 100).toStringAsFixed(1)}%',
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _viewFilter = MatchViewFilter.history;
+                    _historyResultFilter = 'Défaites';
+                  }),
+                  child: _StatCard(
+                    title: 'Défaites',
+                    value: '${_stats?.defaites ?? 0}',
+                    tappable: true,
+                    valueColor: const Color(0xFFFF4757),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -975,11 +1276,14 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
           const SizedBox(height: 18),
           _SectionTitle(label: 'Historique'),
           const SizedBox(height: 10),
-          if (_viewFilter != MatchViewFilter.upcoming)
-            if (_historyMatches.isEmpty)
-              _EmptyState(message: 'Aucun historique disponible.')
+          if (_viewFilter != MatchViewFilter.upcoming) ...[
+            _buildHistoryFilters(),
+            const SizedBox(height: 10),
+            if (_filteredHistoryMatches.isEmpty)
+              _EmptyState(message: 'Aucun match trouvé.')
             else
-              ..._historyMatches.map((m) => _buildMatchCard(m)),
+              ..._filteredHistoryMatches.map((m) => _buildMatchCard(m)),
+          ],
           _buildTournamentSection(),
         ],
       ),
@@ -988,38 +1292,57 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({required this.title, required this.value});
+  const _StatCard({
+    required this.title,
+    required this.value,
+    this.tappable = false,
+    this.valueColor,
+  });
 
   static const _lime = Color(0xFFC8F000);
   static const _cardBg = Color(0xFF0F1621);
 
   final String title;
   final String value;
+  final bool tappable;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {
+    final color = valueColor ?? _lime;
     return Container(
       decoration: BoxDecoration(
         color: _cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _lime.withValues(alpha: 0.12)),
+        border: Border.all(
+          color: tappable ? color.withValues(alpha: 0.2) : _lime.withValues(alpha: 0.12),
+        ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       child: Column(
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (tappable) ...[
+                const SizedBox(width: 3),
+                Icon(Icons.touch_app_rounded, size: 10, color: color.withValues(alpha: 0.5)),
+              ],
+            ],
           ),
           const SizedBox(height: 6),
           Text(
             value,
-            style: const TextStyle(
-              color: _lime,
+            style: TextStyle(
+              color: color,
               fontWeight: FontWeight.w800,
               fontSize: 18,
             ),
@@ -1146,6 +1469,44 @@ class _FilterTab extends StatelessWidget {
             fontSize: 13,
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TournamentInfoChip extends StatelessWidget {
+  const _TournamentInfoChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

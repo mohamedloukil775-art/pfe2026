@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -88,19 +89,22 @@ class _EquipesTabState extends State<EquipesTab> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
       allowMultiple: false,
+      withData: true,
     );
-    return result?.files.single.path;
+    if (result == null || result.files.isEmpty) return null;
+    final bytes = result.files.single.bytes;
+    if (bytes == null) return null;
+    return 'data:image/jpeg;base64,${base64Encode(bytes)}';
   }
 
   Widget _buildTeamAvatar(Team team, {double radius = 26}) {
     final path = team.photoPath;
-    if (path != null && path.isNotEmpty && File(path).existsSync()) {
+    if (path != null && path.isNotEmpty && path.startsWith('data:')) {
       return CircleAvatar(
         radius: radius,
-        backgroundImage: FileImage(File(path)),
+        backgroundImage: MemoryImage(base64Decode(path.split(',').last)),
       );
     }
-
     return CircleAvatar(
       radius: radius,
       child: Text(team.nom.isNotEmpty ? team.nom[0].toUpperCase() : '?'),
@@ -108,18 +112,17 @@ class _EquipesTabState extends State<EquipesTab> {
   }
 
   Widget _buildTeamPhotoPreview(String? path) {
-    if (path != null && path.isNotEmpty && File(path).existsSync()) {
+    if (path != null && path.isNotEmpty && path.startsWith('data:')) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Image.file(
-          File(path),
+        child: Image.memory(
+          base64Decode(path.split(',').last),
           width: 72,
           height: 72,
           fit: BoxFit.cover,
         ),
       );
     }
-
     return Container(
       width: 72,
       height: 72,
@@ -138,47 +141,45 @@ class _EquipesTabState extends State<EquipesTab> {
     required Color accent,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      width: 90,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 20, color: accent),
+            child: Icon(icon, size: 18, color: accent),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
             ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -648,36 +649,6 @@ class _EquipesTabState extends State<EquipesTab> {
     );
   }
 
-  Future<void> _confirmDeleteTeam(Team team) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Supprimer equipe'),
-          content: Text(
-            'Supprimer ${team.nom} ? Cette action est irreversible.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Annuler'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Supprimer'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) return;
-
-    await _runAction(
-      () => _teamsService.deleteTeam(team.id),
-      successMessage: 'Equipe supprimee',
-    );
-  }
 
   String _statusLabel(MatchStatus status) {
     switch (status) {
@@ -956,35 +927,39 @@ class _EquipesTabState extends State<EquipesTab> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        _buildHeroMetric(
-                          label: 'Équipes',
-                          value: totalTeams.toString(),
-                          icon: Icons.groups_2_outlined,
-                          accent: const Color(0xFF58D6B0),
-                        ),
-                        _buildHeroMetric(
-                          label: 'Joueurs actifs',
-                          value: activePlayers.toString(),
-                          icon: Icons.person_outline,
-                          accent: const Color(0xFF5AA9FF),
-                        ),
-                        _buildHeroMetric(
-                          label: 'Avec photo',
-                          value: teamsWithPhoto.toString(),
-                          icon: Icons.photo_library_outlined,
-                          accent: const Color(0xFFF59E0B),
-                        ),
-                        _buildHeroMetric(
-                          label: 'Résultats filtrés',
-                          value: teams.length.toString(),
-                          icon: Icons.filter_alt_outlined,
-                          accent: const Color(0xFF8B5CF6),
-                        ),
-                      ],
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildHeroMetric(
+                            label: 'Équipes',
+                            value: totalTeams.toString(),
+                            icon: Icons.groups_2_outlined,
+                            accent: const Color(0xFF58D6B0),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildHeroMetric(
+                            label: 'Joueurs actifs',
+                            value: activePlayers.toString(),
+                            icon: Icons.person_outline,
+                            accent: const Color(0xFF5AA9FF),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildHeroMetric(
+                            label: 'Avec photo',
+                            value: teamsWithPhoto.toString(),
+                            icon: Icons.photo_library_outlined,
+                            accent: const Color(0xFFF59E0B),
+                          ),
+                          const SizedBox(width: 10),
+                          _buildHeroMetric(
+                            label: 'Résultats filtrés',
+                            value: teams.length.toString(),
+                            icon: Icons.filter_alt_outlined,
+                            accent: const Color(0xFF8B5CF6),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -1083,13 +1058,6 @@ class _EquipesTabState extends State<EquipesTab> {
                             onPressed: _isActionLoading
                                 ? null
                                 : () => _showEditTeamDialog(team),
-                          ),
-                          _buildActionButton(
-                            label: 'Supprimer',
-                            icon: Icons.delete_outline,
-                            onPressed: _isActionLoading
-                                ? null
-                                : () => _confirmDeleteTeam(team),
                           ),
                         ],
                       ),

@@ -8,6 +8,7 @@ class MatchEntry {
     required this.terrain,
     required this.equipe1Id,
     required this.equipe2Id,
+    this.complexeSportif = 'Vamos Sport',
     this.myEquipeId,
     this.equipe1Nom,
     this.equipe2Nom,
@@ -20,6 +21,7 @@ class MatchEntry {
   final int id;
   final DateTime date;
   final String terrain;
+  final String complexeSportif;
   final int equipe1Id;
   final int equipe2Id;
   final int? myEquipeId;
@@ -42,6 +44,7 @@ class MatchEntry {
       id: json['id'] as int,
       date: DateTime.parse(json['date'] as String),
       terrain: json['terrain'] as String,
+      complexeSportif: (json['complexeSportif'] as String?) ?? 'Vamos Sport',
       equipe1Id: json['equipe1Id'] as int? ?? 0,
       equipe2Id: json['equipe2Id'] as int? ?? 0,
       myEquipeId: json['myEquipeId'] as int?,
@@ -67,6 +70,7 @@ class MatchEntry {
       'id': id,
       'date': date.toIso8601String(),
       'terrain': terrain,
+      'complexeSportif': complexeSportif,
       'equipe1Id': equipe1Id,
       'equipe2Id': equipe2Id,
       'myEquipeId': myEquipeId,

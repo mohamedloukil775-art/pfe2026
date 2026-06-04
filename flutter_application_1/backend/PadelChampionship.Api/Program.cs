@@ -11,21 +11,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+});
 
-var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
-if (useInMemory)
-{
-    builder.Services.AddDbContext<ApplicationDbContext>(opt => opt.UseInMemoryDatabase("PadelDb"));
-}
-else
-{
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-                           ?? throw new InvalidOperationException("Missing DB connection string");
-    builder.Services.AddDbContext<ApplicationDbContext>(opt =>
-        opt.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
-}
-// Use in-memory database for development
-builder.Services.AddDbContext<ApplicationDbContext>(opt => opt.UseInMemoryDatabase("PadelDb"));
+builder.Services.AddDbContext<ApplicationDbContext>(opt =>
+    opt.UseSqlite("Data Source=padel.db"));
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
@@ -65,14 +58,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-    if (db.Database.IsRelational())
-    {
-        await db.Database.MigrateAsync();
-    }
-    else
-    {
-        await db.Database.EnsureCreatedAsync();
-    }
+    await db.Database.EnsureCreatedAsync();
 
     if (!db.Users.Any())
     {
@@ -175,7 +161,8 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.Run();
+app.Run("http://0.0.0.0:5001");

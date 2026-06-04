@@ -6,12 +6,7 @@ import 'teams_service.dart';
 class TeamsServiceMock {
   static const _storageKey = 'mock.teams';
 
-  static final List<Map<String, dynamic>> _seedTeams = [
-    {'id': 1, 'nom': 'Aigles', 'joueurIds': [2, 3], 'photoPath': null},
-    {'id': 2, 'nom': 'Lions', 'joueurIds': [4, 5], 'photoPath': null},
-    {'id': 3, 'nom': 'Tigres', 'joueurIds': [6, 7], 'photoPath': null},
-    {'id': 4, 'nom': 'Faucons', 'joueurIds': [8, 9], 'photoPath': null},
-  ];
+  static final List<Map<String, dynamic>> _seedTeams = [];
 
   Future<List<Map<String, dynamic>>> _loadTeamMaps() {
     return MockPersistence.loadList(_storageKey, _seedTeams);

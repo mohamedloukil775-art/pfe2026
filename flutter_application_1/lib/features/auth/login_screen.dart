@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../domain/domain.dart';
 import '../../data/services/services.dart';
+import '../../core/navigation/app_transitions.dart';
 import '../admin/admin_home_screen.dart';
 import '../player/player_home_screen.dart';
 
@@ -61,11 +62,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       if (!mounted) return;
       if (user.role == UserRole.admin) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const AdminHomeScreen()),
+          AppTransitions.fadeSlide(page: const AdminHomeScreen()),
         );
       } else {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => PlayerHomeScreen(userId: user.id)),
+          AppTransitions.fadeSlide(page: PlayerHomeScreen(userId: user.id)),
         );
       }
     } catch (e) {
@@ -307,41 +308,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
                       const SizedBox(height: 20),
 
-                      // Demo credentials
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: _lime.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: _lime.withValues(alpha: 0.15)),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.info_outline_rounded, color: _lime, size: 16),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Comptes de démonstration',
-                                  style: TextStyle(
-                                    color: Color(0xFFC8F000),
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            _DemoRow(label: 'Admin', value: 'admin@padel.com  •  Admin123!'),
-                            const SizedBox(height: 4),
-                            _DemoRow(label: 'Joueur', value: 'ali@padel.com  •  Player123!'),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
                       // Sign up link
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -412,33 +378,6 @@ class _PadelField extends StatelessWidget {
         prefixIcon: Icon(icon, size: 20),
         suffixIcon: suffixIcon,
       ),
-    );
-  }
-}
-
-class _DemoRow extends StatelessWidget {
-  const _DemoRow({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-          decoration: BoxDecoration(
-            color: const Color(0xFFC8F000).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(color: Color(0xFFC8F000), fontSize: 10, fontWeight: FontWeight.w700),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(value, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11)),
-      ],
     );
   }
 }

@@ -13,7 +13,6 @@ class AuthServiceMock {
   static final Map<String, dynamic> _seed = {
     'users': <String, String>{
       'admin@padel.com': 'Admin123!',
-      'ali@padel.com': 'Player123!',
     },
     'details': <String, Map<String, dynamic>>{
       'admin@padel.com': {
@@ -23,16 +22,6 @@ class AuthServiceMock {
         'motDePasse': 'Admin123!',
         'role': 'Admin',
         'niveau': 10,
-        'statut': 'Actif',
-        'clubId': 1,
-      },
-      'ali@padel.com': {
-        'id': 2,
-        'nom': 'Ali Ben',
-        'email': 'ali@padel.com',
-        'motDePasse': 'Player123!',
-        'role': 'Joueur',
-        'niveau': 5,
         'statut': 'Actif',
         'clubId': 1,
       },
@@ -174,6 +163,64 @@ class AuthServiceMock {
     );
 
     return AppUser.fromJson(userData);
+  }
+
+  Future<void> changePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 400));
+
+    final state = await _loadAuthState();
+    final users = _readUsers(state);
+    final details = _readDetails(state);
+
+    if (!users.containsKey(email) || users[email] != currentPassword) {
+      throw ApiException('Mot de passe actuel incorrect', 400);
+    }
+
+    users[email] = newPassword;
+    if (details.containsKey(email)) {
+      details[email]!['motDePasse'] = newPassword;
+    }
+    state['users'] = users;
+    state['details'] = details;
+    await _saveAuthState(state);
+  }
+
+  Future<void> updateName({
+    required String email,
+    required String newName,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 400));
+
+    final state = await _loadAuthState();
+    final details = _readDetails(state);
+
+    if (!details.containsKey(email)) {
+      throw ApiException('Compte introuvable', 404);
+    }
+
+    details[email]!['nom'] = newName;
+    state['details'] = details;
+    await _saveAuthState(state);
+  }
+
+  Future<void> updatePhotoPath({
+    required String email,
+    required String photoPath,
+  }) async {
+    final state = await _loadAuthState();
+    final details = _readDetails(state);
+
+    if (!details.containsKey(email)) {
+      throw ApiException('Compte introuvable', 404);
+    }
+
+    details[email]!['photoPath'] = photoPath;
+    state['details'] = details;
+    await _saveAuthState(state);
   }
 
   Future<void> logout() async {

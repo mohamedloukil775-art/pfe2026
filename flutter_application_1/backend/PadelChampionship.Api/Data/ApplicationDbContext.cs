@@ -6,6 +6,7 @@ namespace PadelChampionship.Api.Data;
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<StorageEntry> StorageEntries => Set<StorageEntry>();
     public DbSet<Club> Clubs => Set<Club>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamPlayer> TeamPlayers => Set<TeamPlayer>();
@@ -23,6 +24,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
             .IsUnique();
+
+        modelBuilder.Entity<StorageEntry>()
+            .HasKey(s => s.Key);
 
         modelBuilder.Entity<TeamPlayer>()
             .HasKey(tp => new { tp.TeamId, tp.UserId });

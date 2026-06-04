@@ -129,4 +129,32 @@ class AuthService {
     final token = await TokenStorage.getToken();
     return token != null;
   }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/auth/change-password'),
+            headers: await _getHeaders(includeAuth: true),
+            body: jsonEncode({
+              'currentPassword': currentPassword,
+              'newPassword': newPassword,
+            }),
+          )
+          .timeout(ApiConfig.timeout);
+
+      if (response.statusCode == 200) return;
+
+      if (response.statusCode == 400) {
+        throw ApiException('Mot de passe actuel incorrect', 400);
+      }
+      throw ApiException('Erreur lors du changement de mot de passe', response.statusCode);
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Impossible de se connecter au serveur: $e');
+    }
+  }
 }

@@ -336,56 +336,245 @@ class _TournoisTabState extends State<TournoisTab> {
       return;
     }
 
-    int? selected = match.vainqueur;
-    final confirmed = await showDialog<bool>(
+    final p1Name = _participantName(t, match.joueur1);
+    final p2Name = _participantName(t, match.joueur2);
+
+    // Int state for set 1 & 2 (picker 0-7); text for set 3 (no max)
+    int s1j1 = int.tryParse(match.scoreSet1?.split('-').firstOrNull ?? '') ?? 0;
+    int s1j2 = int.tryParse(match.scoreSet1?.split('-').lastOrNull  ?? '') ?? 0;
+    int s2j1 = int.tryParse(match.scoreSet2?.split('-').firstOrNull ?? '') ?? 0;
+    int s2j2 = int.tryParse(match.scoreSet2?.split('-').lastOrNull  ?? '') ?? 0;
+    final s3j1Ctrl = TextEditingController(text: match.scoreSet3?.split('-').firstOrNull ?? '');
+    final s3j2Ctrl = TextEditingController(text: match.scoreSet3?.split('-').lastOrNull  ?? '');
+
+    // Determines winner from current scores (null if still undecided)
+    int? autoWinner(int v1j1, int v1j2, int v2j1, int v2j2) {
+      int wins1 = 0, wins2 = 0;
+      if (v1j1 > v1j2) wins1++; else if (v1j2 > v1j1) wins2++;
+      if (v2j1 > v2j2) wins1++; else if (v2j2 > v2j1) wins2++;
+      if (wins1 == 2) return match.joueur1;
+      if (wins2 == 2) return match.joueur2;
+      // Tiebreak set 3
+      final v3j1 = int.tryParse(s3j1Ctrl.text) ?? -1;
+      final v3j2 = int.tryParse(s3j2Ctrl.text) ?? -1;
+      if (v3j1 < 0 || v3j2 < 0) return null;
+      // Must reach ≥ 10 with difference ≥ 2
+      final maxS = v3j1 > v3j2 ? v3j1 : v3j2;
+      final diff = (v3j1 - v3j2).abs();
+      if (maxS < 10 || diff < 2) return null;
+      return v3j1 > v3j2 ? match.joueur1 : match.joueur2;
+    }
+
+    bool needsSet3(int v1j1, int v1j2, int v2j1, int v2j2) {
+      int w1 = 0, w2 = 0;
+      if (v1j1 > v1j2) w1++; else if (v1j2 > v1j1) w2++;
+      if (v2j1 > v2j2) w1++; else if (v2j2 > v2j1) w2++;
+      return w1 == 1 && w2 == 1;
+    }
+
+    final result = await showDialog<({int winnerId, String s1, String s2, String? s3})>(
       context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) => AlertDialog(
-        backgroundColor: _cardBg,
-        title: const Text('Désigner le vainqueur', style: TextStyle(color: _textDk, fontWeight: FontWeight.w800)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          _winnerOption(t, match.joueur1, selected, () => setS(() => selected = match.joueur1)),
-          const SizedBox(height: 10),
-          _winnerOption(t, match.joueur2, selected, () => setS(() => selected = match.joueur2)),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _gold, foregroundColor: _textDk),
-            onPressed: selected == null ? null : () => Navigator.pop(ctx, true),
-            child: const Text('Confirmer'),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        final needs3 = needsSet3(s1j1, s1j2, s2j1, s2j2);
+        final winner = autoWinner(s1j1, s1j2, s2j1, s2j2);
+
+        void rebuild() => setS(() {});
+
+        return AlertDialog(
+          backgroundColor: _cardBg,
+          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Saisir les scores', style: TextStyle(color: _textDk, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text('$p1Name  vs  $p2Name',
+                style: const TextStyle(fontSize: 12, color: _navy, fontWeight: FontWeight.w600)),
+          ]),
+          content: SizedBox(
+            width: 360,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                // Column headers
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(children: [
+                    const SizedBox(width: 70),
+                    Expanded(child: Text(p1Name, textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: _navy),
+                        overflow: TextOverflow.ellipsis)),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(p2Name, textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: _navy),
+                        overflow: TextOverflow.ellipsis)),
+                  ]),
+                ),
+                // Manche 1 picker (0-7)
+                _pickerRow('Manche 1', s1j1, s1j2, 7,
+                  (v) => setS(() => s1j1 = v),
+                  (v) => setS(() => s1j2 = v),
+                ),
+                const SizedBox(height: 10),
+                // Manche 2 picker (0-7)
+                _pickerRow('Manche 2', s2j1, s2j2, 7,
+                  (v) => setS(() => s2j1 = v),
+                  (v) => setS(() => s2j2 = v),
+                ),
+                // Manche 3 text input (no max) — only if 1-1
+                if (needs3) ...[
+                  const SizedBox(height: 10),
+                  _scoreRow('Manche 3', s3j1Ctrl, s3j2Ctrl, rebuild),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Super tie-break · premier à 10 · différence ≥ 2 (ex: 10-8, 11-9, 12-10…)',
+                      style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.4)),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+                // Auto winner banner
+                if (winner != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _gold.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _gold.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      const Icon(Icons.emoji_events, color: _gold, size: 16),
+                      const SizedBox(width: 6),
+                      Flexible(child: Text('Vainqueur : ${_participantName(t, winner)}',
+                          style: const TextStyle(color: _gold, fontWeight: FontWeight.w800, fontSize: 13))),
+                    ]),
+                  ),
+                ],
+              ]),
+            ),
           ),
-        ],
-      )),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: _gold, foregroundColor: _textDk),
+              onPressed: winner == null ? null : () {
+                Navigator.pop(ctx, (
+                  winnerId: winner,
+                  s1: '$s1j1-$s1j2',
+                  s2: '$s2j1-$s2j2',
+                  s3: needs3 ? '${s3j1Ctrl.text}-${s3j2Ctrl.text}' : null,
+                ));
+              },
+              child: const Text('Confirmer'),
+            ),
+          ],
+        );
+      }),
     );
 
-    if (confirmed != true || selected == null) return;
+    if (result == null) return;
     await _runAction(
-      () => _svc.setMatchWinner(tournamentId: t.id, matchId: match.id, winnerId: selected!),
-      'Vainqueur enregistré — avancé au tour suivant',
+      () => _svc.setMatchWinner(
+        tournamentId: t.id,
+        matchId: match.id,
+        winnerId: result.winnerId,
+        scoreSet1: result.s1,
+        scoreSet2: result.s2,
+        scoreSet3: result.s3,
+      ),
+      'Résultat enregistré — ${_participantName(t, result.winnerId)} avance au tour suivant',
     );
   }
 
-  Future<void> _confirmDelete(Tournament t) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _cardBg,
-        title: const Text('Supprimer le tournoi?', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w800)),
-        content: Text('Supprimer « ${t.nom} »? Cette action est irréversible.',
-          style: const TextStyle(color: _textDk)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Supprimer'),
+  // Number picker row (0..max) for sets 1 & 2
+  Widget _pickerRow(
+    String label,
+    int valJ1, int valJ2, int max,
+    ValueChanged<int> onJ1,
+    ValueChanged<int> onJ2,
+  ) {
+    Widget numBtn(int n, int current, ValueChanged<int> onTap) {
+      final sel = n == current;
+      return GestureDetector(
+        onTap: () => onTap(n),
+        child: Container(
+          width: 28, height: 28,
+          margin: const EdgeInsets.only(right: 4),
+          decoration: BoxDecoration(
+            color: sel ? _gold : _navy.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: sel ? _gold : _border),
           ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await _runAction(() => _svc.deleteTournament(t.id), 'Tournoi supprimé');
+          child: Center(child: Text('$n',
+            style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w800,
+              color: sel ? _textDk : _navy,
+            ))),
+        ),
+      );
+    }
+
+    final nums = List.generate(max + 1, (i) => i);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textDk)),
+      const SizedBox(height: 6),
+      Row(children: [
+        const SizedBox(width: 70),
+        Expanded(child: Wrap(spacing: 0, children: nums.map((n) => numBtn(n, valJ1, onJ1)).toList())),
+        const SizedBox(width: 8),
+        Expanded(child: Wrap(spacing: 0, children: nums.map((n) => numBtn(n, valJ2, onJ2)).toList())),
+      ]),
+    ]);
   }
+
+  // Text field row for set 3 only (no max)
+  Widget _scoreRow(
+    String label,
+    TextEditingController ctrlJ1,
+    TextEditingController ctrlJ2,
+    VoidCallback onChanged,
+  ) {
+    return Row(children: [
+      SizedBox(
+        width: 70,
+        child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _textDk)),
+      ),
+      Expanded(
+        child: TextFormField(
+          controller: ctrlJ1,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          decoration: const InputDecoration(
+            hintText: '0', hintStyle: TextStyle(fontSize: 11),
+            contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+            isDense: true,
+          ),
+          validator: (v) => (v == null || v.isEmpty || int.tryParse(v) == null) ? 'Nombre' : null,
+          onChanged: (_) => onChanged(),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Text('-', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
+            color: Colors.white.withValues(alpha: 0.5))),
+      ),
+      Expanded(
+        child: TextFormField(
+          controller: ctrlJ2,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          decoration: const InputDecoration(
+            hintText: '0', hintStyle: TextStyle(fontSize: 11),
+            contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+            isDense: true,
+          ),
+          validator: (v) => (v == null || v.isEmpty || int.tryParse(v) == null) ? 'Nombre' : null,
+          onChanged: (_) => onChanged(),
+        ),
+      ),
+    ]);
+  }
+
 
   // ── BUILD ─────────────────────────────────────────────────────────────────
 
@@ -481,11 +670,6 @@ class _TournoisTabState extends State<TournoisTab> {
                 _chip(_fmtDate(t.date), Icons.calendar_today_outlined),
               ]),
             ])),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.white54),
-              onPressed: _actionLoading ? null : () => _confirmDelete(t),
-              tooltip: 'Supprimer',
-            ),
           ]),
         ),
 
@@ -562,30 +746,7 @@ class _TournoisTabState extends State<TournoisTab> {
     ]),
   ));
 
-  Widget _winnerOption(Tournament t, int id, int? selected, VoidCallback onTap) {
-    final isSelected = selected == id;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? _gold.withValues(alpha: 0.15) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? _gold : _border, width: isSelected ? 2 : 1),
-        ),
-        child: Row(children: [
-          Icon(isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-            color: isSelected ? _gold : Colors.grey),
-          const SizedBox(width: 12),
-          Icon(Icons.emoji_events, color: isSelected ? _gold : Colors.grey, size: 18),
-          const SizedBox(width: 8),
-          Expanded(child: Text(_participantName(t, id),
-            style: TextStyle(fontWeight: FontWeight.w700, color: isSelected ? _textDk : Colors.black54))),
-        ]),
-      ),
-    );
-  }
+
 
   // ── Form helpers ──────────────────────────────────────────────────────────
 
@@ -715,7 +876,7 @@ class _BracketCanvas extends StatelessWidget {
   static const double mGap   = 24;  // gap between matches in same round
   static const double colGap = 56;  // horizontal gap between rounds
   static const double rBoxW  = 130; // result box width
-  static const double rBoxH  = 38;  // result box height
+  static const double rBoxH  = 62;  // result box height (schedule + winner + score lines)
   static const double centerW = 180; // finale center column
 
   // ── Layout ─────────────────────────────────────────────────────────────────
@@ -886,6 +1047,15 @@ class _BracketCanvas extends StatelessWidget {
     final wId      = match?.vainqueur;
     final hasWin   = wId != null && wId > 0;
     final canClick = match != null && (match.joueur1 > 0 || match.joueur2 > 0);
+
+    String? scoreStr;
+    if (match != null) {
+      final parts = [match.scoreSet1, match.scoreSet2, match.scoreSet3]
+          .whereType<String>()
+          .toList();
+      if (parts.isNotEmpty) scoreStr = parts.join(' / ');
+    }
+
     return GestureDetector(
       onTap: canClick ? () => onWinnerTap(match) : null,
       child: Container(
@@ -893,22 +1063,40 @@ class _BracketCanvas extends StatelessWidget {
           color: hasWin ? _gold.withValues(alpha: 0.15) : Colors.grey.shade50,
           border: Border.all(color: hasWin ? _gold : _border, width: hasWin ? 2 : 1),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        alignment: Alignment.centerLeft,
-        child: Row(children: [
-          if (hasWin) const Icon(Icons.emoji_events, color: _gold, size: 13),
-          if (hasWin) const SizedBox(width: 4),
-          Expanded(child: Text(
-            hasWin ? getName(wId) : (canClick ? '→ toucher' : '—'),
-            style: TextStyle(
-              color: hasWin ? _textDk : (canClick ? _navy : Colors.grey),
-              fontWeight: hasWin ? FontWeight.w800 : FontWeight.w400,
-              fontSize: 11,
-              fontStyle: !hasWin && canClick ? FontStyle.italic : FontStyle.normal,
-            ),
-            overflow: TextOverflow.ellipsis,
-          )),
-        ]),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Schedule info row
+            if (match != null)
+              Text(
+                '${match.heureDebut}  T${match.terrainNumero}  ${match.complexeSportif}',
+                style: const TextStyle(fontSize: 7.5, color: Colors.blueGrey, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            const SizedBox(height: 2),
+            // Winner / tap label
+            Row(children: [
+              if (hasWin) const Icon(Icons.emoji_events, color: _gold, size: 11),
+              if (hasWin) const SizedBox(width: 3),
+              Expanded(child: Text(
+                hasWin ? getName(wId) : (canClick ? '→ toucher' : '—'),
+                style: TextStyle(
+                  color: hasWin ? _textDk : (canClick ? _navy : Colors.grey),
+                  fontWeight: hasWin ? FontWeight.w800 : FontWeight.w400,
+                  fontSize: 11,
+                  fontStyle: !hasWin && canClick ? FontStyle.italic : FontStyle.normal,
+                ),
+                overflow: TextOverflow.ellipsis,
+              )),
+            ]),
+            if (scoreStr != null)
+              Text(scoreStr,
+                  style: const TextStyle(fontSize: 9, color: Colors.black54, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis),
+          ],
+        ),
       ),
     );
   }
@@ -974,6 +1162,24 @@ class _BracketCanvas extends StatelessWidget {
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900,
               letterSpacing: 2, fontSize: 12)),
         ),
+        if (f != null)
+          Container(
+            width: centerW,
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+            color: _navy.withValues(alpha: 0.08),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.schedule, size: 9, color: _navy),
+              const SizedBox(width: 3),
+              Text('${f.heureDebut}  T${f.terrainNumero}',
+                style: const TextStyle(fontSize: 9, color: _navy, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 6),
+              const Icon(Icons.location_on_outlined, size: 9, color: _navy),
+              const SizedBox(width: 2),
+              Flexible(child: Text(f.complexeSportif,
+                style: const TextStyle(fontSize: 9, color: _navy, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis)),
+            ]),
+          ),
         Container(
           width: centerW,
           padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),

@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PadelChampionship.Api.Data;
 using PadelChampionship.Api.Dtos;
 using PadelChampionship.Api.Models;
 using PadelChampionship.Api.Services;
+using System.Security.Claims;
 
 namespace PadelChampionship.Api.Controllers;
 
@@ -78,5 +80,26 @@ public class AuthController(ApplicationDbContext db, IJwtTokenService jwtTokenSe
         var token = jwtTokenService.CreateToken(newUser);
 
         return Ok(new AuthResponse(newUser.Id, newUser.Nom, newUser.Email, newUser.Role.ToString(), token));
+    }
+
+    [Authorize]
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var user = await db.Users.FindAsync(userId);
+        if (user is null)
+            return Unauthorized();
+
+        if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.MotDePasseHash))
+            return BadRequest("Mot de passe actuel incorrect.");
+
+        user.MotDePasseHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        await db.SaveChangesAsync();
+
+        return Ok("Mot de passe mis à jour avec succès.");
     }
 }
