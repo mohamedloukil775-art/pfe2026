@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "PowerShell(taskkill /F /IM flutter_application_1.exe 2>$null)",
-      "PowerShell(taskkill /F /IM dart.exe 2>$null)"
+      "PowerShell(taskkill /F /IM dart.exe 2>$null)",
+      "Bash(flutter run *)",
+      "Bash(echo \"PID: $!\")",
+      "Read(//tmp/**)"
     ]
   }
 }

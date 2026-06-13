@@ -16,6 +16,9 @@ class MatchEntry {
     this.scoreEquipe1,
     this.scoreEquipe2,
     this.scoreValide,
+    this.scoreSet1,
+    this.scoreSet2,
+    this.scoreSet3,
   });
 
   final int id;
@@ -31,6 +34,9 @@ class MatchEntry {
   MatchScore? scoreEquipe1;
   MatchScore? scoreEquipe2;
   MatchScore? scoreValide;
+  String? scoreSet1;
+  String? scoreSet2;
+  String? scoreSet3;
 
   factory MatchEntry.fromJson(Map<String, dynamic> json) {
     final score1 = json['scoreEquipe1'];
@@ -59,9 +65,12 @@ class MatchEntry {
           && json['scoreEquipe2'] is Map<String, dynamic>
           ? MatchScore.fromJson(json['scoreEquipe2'] as Map<String, dynamic>)
           : null,
-      scoreValide: json['scoreValide'] != null 
+      scoreValide: json['scoreValide'] != null
           ? MatchScore.fromJson(json['scoreValide'] as Map<String, dynamic>)
           : combinedScore,
+      scoreSet1: json['scoreSet1'] as String?,
+      scoreSet2: json['scoreSet2'] as String?,
+      scoreSet3: json['scoreSet3'] as String?,
     );
   }
 
@@ -78,6 +87,9 @@ class MatchEntry {
       'scoreEquipe1': scoreEquipe1?.toJson(),
       'scoreEquipe2': scoreEquipe2?.toJson(),
       'scoreValide': scoreValide?.toJson(),
+      if (scoreSet1 != null) 'scoreSet1': scoreSet1,
+      if (scoreSet2 != null) 'scoreSet2': scoreSet2,
+      if (scoreSet3 != null) 'scoreSet3': scoreSet3,
     };
   }
 

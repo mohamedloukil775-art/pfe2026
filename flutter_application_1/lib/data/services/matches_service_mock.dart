@@ -91,6 +91,9 @@ class MatchesServiceMock {
     required int equipeId,
     required int setsEquipe1,
     required int setsEquipe2,
+    String? scoreSet1,
+    String? scoreSet2,
+    String? scoreSet3,
   }) async {
     await Future.delayed(const Duration(milliseconds: 120));
     final matches = await _loadMatchMaps();
@@ -100,6 +103,9 @@ class MatchesServiceMock {
       'setsEquipe1': setsEquipe1,
       'setsEquipe2': setsEquipe2,
     };
+    if (scoreSet1 != null) matches[idx]['scoreSet1'] = scoreSet1;
+    if (scoreSet2 != null) matches[idx]['scoreSet2'] = scoreSet2;
+    if (scoreSet3 != null) matches[idx]['scoreSet3'] = scoreSet3;
     matches[idx]['statut'] = 'ResultatSaisi';
     await _saveMatchMaps(matches);
   }
@@ -108,6 +114,9 @@ class MatchesServiceMock {
     required int matchId,
     required int setsEquipe1,
     required int setsEquipe2,
+    String? scoreSet1,
+    String? scoreSet2,
+    String? scoreSet3,
   }) async {
     await Future.delayed(const Duration(milliseconds: 120));
     final matches = await _loadMatchMaps();
@@ -117,6 +126,9 @@ class MatchesServiceMock {
       'setsEquipe1': setsEquipe1,
       'setsEquipe2': setsEquipe2,
     };
+    if (scoreSet1 != null) matches[idx]['scoreSet1'] = scoreSet1;
+    if (scoreSet2 != null) matches[idx]['scoreSet2'] = scoreSet2;
+    if (scoreSet3 != null) matches[idx]['scoreSet3'] = scoreSet3;
     matches[idx]['statut'] = 'Valide';
     await _saveMatchMaps(matches);
   }

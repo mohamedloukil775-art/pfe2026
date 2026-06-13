@@ -11,17 +11,19 @@ class PlayersServiceMock {
   static const _historyKey = 'mock.players.history';
 
   static final List<Map<String, dynamic>> _seedPlayers = [
-    {
-      'id': 1,
-      'nom': 'Admin Club',
-      'email': 'admin@padel.com',
-      'motDePasse': 'Admin123!',
-      'role': 'Admin',
-      'niveau': 10,
-      'statut': 'Actif',
-      'clubId': 1,
-      'photoPath': null,
-    },
+    {'id': 1,  'nom': 'Admin Club',       'email': 'admin@padel.com',     'motDePasse': 'Admin123!',  'role': 'Admin',  'niveau': 10, 'statut': 'Actif',  'clubId': 1, 'photoPath': null},
+    {'id': 2,  'nom': 'Sallemi Imen',     'email': 'imen@padel.com',      'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 7,  'statut': 'Actif',  'clubId': 1, 'photoPath': null},
+    {'id': 3,  'nom': 'Mehrez Karim',     'email': 'karim@padel.com',     'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 6,  'statut': 'Actif',  'clubId': 1, 'photoPath': null},
+    {'id': 4,  'nom': 'Ben Ali Nour',     'email': 'nour@padel.com',      'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 8,  'statut': 'Actif',  'clubId': 1, 'photoPath': null},
+    {'id': 5,  'nom': 'Trabelsi Yassine','email': 'yassine@padel.com',   'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 5,  'statut': 'Actif',  'clubId': 1, 'photoPath': null},
+    {'id': 6,  'nom': 'Chaabane Rania',  'email': 'rania@padel.com',     'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 7,  'statut': 'Actif',  'clubId': 2, 'photoPath': null},
+    {'id': 7,  'nom': 'Jebali Mohamed',  'email': 'mohamed@padel.com',   'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 4,  'statut': 'Actif',  'clubId': 2, 'photoPath': null},
+    {'id': 8,  'nom': 'Sfaxi Leila',     'email': 'leila@padel.com',     'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 6,  'statut': 'Actif',  'clubId': 2, 'photoPath': null},
+    {'id': 9,  'nom': 'Hmidi Bilel',     'email': 'bilel@padel.com',     'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 9,  'statut': 'Actif',  'clubId': 3, 'photoPath': null},
+    {'id': 10, 'nom': 'Ayari Sara',      'email': 'sara@padel.com',      'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 5,  'statut': 'Actif',  'clubId': 3, 'photoPath': null},
+    {'id': 11, 'nom': 'Bouzid Fares',    'email': 'fares@padel.com',     'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 7,  'statut': 'Actif',  'clubId': 3, 'photoPath': null},
+    {'id': 12, 'nom': 'Khelifi Amira',   'email': 'amira@padel.com',     'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 6,  'statut': 'Bloque', 'clubId': 4, 'photoPath': null},
+    {'id': 13, 'nom': 'Mzoughi Tarek',   'email': 'tarek@padel.com',     'motDePasse': 'Joueur123!', 'role': 'Joueur', 'niveau': 8,  'statut': 'Actif',  'clubId': 4, 'photoPath': null},
   ];
 
   static final Map<String, List<Map<String, dynamic>>> _seedHistory = {

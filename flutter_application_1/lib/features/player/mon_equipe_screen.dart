@@ -176,7 +176,18 @@ class _MonEquipeScreenState extends State<MonEquipeScreen> {
     );
   }
 
+  String _playerNamesForTeam(Team team) {
+    final names = team.playerIds
+        .map((id) {
+          try { return _allPlayers.firstWhere((p) => p.id == id).nom; } catch (_) { return null; }
+        })
+        .whereType<String>()
+        .toList();
+    return names.take(2).join(' · ');
+  }
+
   Widget _buildTeamHeader(Team team, Map<String, int> stats) {
+    final playerNames = _playerNamesForTeam(team);
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
@@ -200,6 +211,20 @@ class _MonEquipeScreenState extends State<MonEquipeScreen> {
                   team.nom,
                   style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
                 ),
+                if (playerNames.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    const Icon(Icons.person_outline, size: 12, color: _lime),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        playerNames,
+                        style: TextStyle(color: _lime.withValues(alpha: 0.85), fontSize: 12, fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ]),
+                ],
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -259,7 +284,6 @@ class _MonEquipeScreenState extends State<MonEquipeScreen> {
       else { resultColor = Colors.orange; resultLabel = 'N'; }
     }
 
-    final opponentId = isEq1 ? match.equipe2Id : match.equipe1Id;
     final opponentName = isEq1
         ? (match.equipe2Nom ?? _teamNameById(match.equipe2Id))
         : (match.equipe1Nom ?? _teamNameById(match.equipe1Id));
@@ -323,7 +347,7 @@ class _MonEquipeScreenState extends State<MonEquipeScreen> {
               _InfoTag(icon: Icons.location_on_outlined, text: match.terrain),
             ],
           ),
-          if (hasScore && score != null) ...[
+          if (hasScore) ...[
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

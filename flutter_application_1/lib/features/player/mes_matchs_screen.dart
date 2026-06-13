@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/services/services.dart';
 import '../../domain/domain.dart';
 
-enum MatchViewFilter { all, upcoming, history }
+enum MatchViewFilter { all, upcoming, history, matchs, tournois }
 
 class MesMatchsScreen extends StatefulWidget {
   const MesMatchsScreen({super.key, required this.userId, this.teamIds = const []});
@@ -166,7 +166,7 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
       case MatchStatus.programme:
         return 'Programme';
       case MatchStatus.resultatSaisi:
-        return 'Resultat saisi';
+        return 'Résultat en attente';
       case MatchStatus.valide:
         return 'Valide';
       case MatchStatus.forfait:
@@ -189,16 +189,6 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
 
   String _teamNameById(int id) {
     return 'Equipe #$id';
-  }
-
-  String _myTeamName(MatchEntry match) {
-    if (match.myEquipeId == match.equipe1Id) {
-      return _teamName(match, true);
-    }
-    if (match.myEquipeId == match.equipe2Id) {
-      return _teamName(match, false);
-    }
-    return _teamNameById(match.myEquipeId ?? 0);
   }
 
   String _teamName(MatchEntry match, bool isFirst) {
@@ -850,90 +840,189 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
   Future<void> _showSubmitScoreDialog(MatchEntry match) async {
     if (match.myEquipeId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Impossible de determiner votre equipe pour ce match.'),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text('Impossible de déterminer votre équipe.'), backgroundColor: Colors.red),
       );
       return;
     }
 
-    final formKey = GlobalKey<FormState>();
-    var score1 = '0';
-    var score2 = '0';
+    final eq1Name = _teamName(match, true);
+    final eq2Name = _teamName(match, false);
     final selectedEquipeId = match.myEquipeId!;
 
-    await showDialog<void>(
+    int s1e1 = 0, s1e2 = 0;
+    int s2e1 = 0, s2e2 = 0;
+    final s3e1Ctrl = TextEditingController();
+    final s3e2Ctrl = TextEditingController();
+
+    bool needsSet3(int v1e1, int v1e2, int v2e1, int v2e2) {
+      int w1 = 0, w2 = 0;
+      if (v1e1 > v1e2) w1++; else if (v1e2 > v1e1) w2++;
+      if (v2e1 > v2e2) w1++; else if (v2e2 > v2e1) w2++;
+      return w1 == 1 && w2 == 1;
+    }
+
+    // Returns equipe index (1 or 2) or null if not decided
+    int? autoWinner(int v1e1, int v1e2, int v2e1, int v2e2) {
+      int w1 = 0, w2 = 0;
+      if (v1e1 > v1e2) w1++; else if (v1e2 > v1e1) w2++;
+      if (v2e1 > v2e2) w1++; else if (v2e2 > v2e1) w2++;
+      if (w1 == 2) return 1;
+      if (w2 == 2) return 2;
+      final v3e1 = int.tryParse(s3e1Ctrl.text) ?? -1;
+      final v3e2 = int.tryParse(s3e2Ctrl.text) ?? -1;
+      if (v3e1 < 0 || v3e2 < 0) return null;
+      final maxS = v3e1 > v3e2 ? v3e1 : v3e2;
+      final diff = (v3e1 - v3e2).abs();
+      if (maxS < 10 || diff < 2) return null;
+      return v3e1 > v3e2 ? 1 : 2;
+    }
+
+    final result = await showDialog<({int sets1, int sets2, String s1, String s2, String? s3})>(
       context: context,
-      builder: (context) {
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        final needs3 = needsSet3(s1e1, s1e2, s2e1, s2e2);
+        final winner = autoWinner(s1e1, s1e2, s2e1, s2e2);
+
+        Widget numBtn(int n, int current, ValueChanged<int> onTap) {
+          final sel = n == current;
+          return GestureDetector(
+            onTap: () => onTap(n),
+            child: Container(
+              width: 30, height: 30,
+              margin: const EdgeInsets.only(right: 4, bottom: 4),
+              decoration: BoxDecoration(
+                color: sel ? _lime : Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: sel ? _lime : Colors.white.withValues(alpha: 0.15)),
+              ),
+              child: Center(child: Text('$n',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
+                    color: sel ? const Color(0xFF080C14) : Colors.white70))),
+            ),
+          );
+        }
+
+        Widget pickerRow(String label, int valE1, int valE2,
+            ValueChanged<int> onE1, ValueChanged<int> onE2) {
+          final nums = List.generate(8, (i) => i);
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white70)),
+            const SizedBox(height: 6),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(width: 72,
+                child: Text(eq1Name, style: const TextStyle(fontSize: 10, color: Colors.white54),
+                  overflow: TextOverflow.ellipsis)),
+              Expanded(child: Wrap(children: nums.map((n) => numBtn(n, valE1, onE1)).toList())),
+            ]),
+            const SizedBox(height: 4),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(width: 72,
+                child: Text(eq2Name, style: const TextStyle(fontSize: 10, color: Colors.white54),
+                  overflow: TextOverflow.ellipsis)),
+              Expanded(child: Wrap(children: nums.map((n) => numBtn(n, valE2, onE2)).toList())),
+            ]),
+          ]);
+        }
+
+        Widget scoreField(String hint, TextEditingController ctrl) => Expanded(
+          child: TextField(
+            controller: ctrl,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+            decoration: InputDecoration(
+              hintText: hint, hintStyle: const TextStyle(fontSize: 11),
+              contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+              isDense: true,
+            ),
+            onChanged: (_) => setS(() {}),
+          ),
+        );
+
         return AlertDialog(
-          title: const Text('Saisir score'),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('${_teamName(match, true)} vs ${_teamName(match, false)}'),
+          backgroundColor: const Color(0xFF0F1621),
+          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Saisir le score', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text('$eq1Name  vs  $eq2Name',
+              style: const TextStyle(fontSize: 12, color: _lime, fontWeight: FontWeight.w600)),
+          ]),
+          content: SizedBox(
+            width: 360,
+            child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              pickerRow('Manche 1', s1e1, s1e2,
+                (v) => setS(() => s1e1 = v), (v) => setS(() => s1e2 = v)),
+              const SizedBox(height: 14),
+              pickerRow('Manche 2', s2e1, s2e2,
+                (v) => setS(() => s2e1 = v), (v) => setS(() => s2e2 = v)),
+              if (needs3) ...[
+                const SizedBox(height: 14),
+                Text('Manche 3', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white70)),
+                const SizedBox(height: 6),
+                Row(children: [
+                  scoreField(eq1Name.split(' ').first, s3e1Ctrl),
+                  const Padding(padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('-', style: TextStyle(color: Colors.white54, fontSize: 18, fontWeight: FontWeight.w800))),
+                  scoreField(eq2Name.split(' ').first, s3e2Ctrl),
+                ]),
+                Padding(padding: const EdgeInsets.only(top: 4),
+                  child: Text('Super tie-break · premier à 10 · différence ≥ 2',
+                    style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.35)),
+                    textAlign: TextAlign.center)),
+              ],
+              if (winner != null) ...[
                 const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Mon equipe: ${_myTeamName(match)}'),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  initialValue: score1,
-                  decoration: InputDecoration(labelText: _teamName(match, true)),
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) => score1 = value,
-                  validator: (value) {
-                    final parsed = int.tryParse(value ?? '');
-                    if (parsed == null || parsed < 0) return 'Score invalide';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  initialValue: score2,
-                  decoration: InputDecoration(labelText: _teamName(match, false)),
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) => score2 = value,
-                  validator: (value) {
-                    final parsed = int.tryParse(value ?? '');
-                    if (parsed == null || parsed < 0) return 'Score invalide';
-                    return null;
-                  },
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFB800).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFFB800).withValues(alpha: 0.35)),
+                  ),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const Icon(Icons.emoji_events, color: Color(0xFFFFB800), size: 16),
+                    const SizedBox(width: 6),
+                    Text('Vainqueur : ${winner == 1 ? eq1Name : eq2Name}',
+                      style: const TextStyle(color: Color(0xFFFFB800), fontWeight: FontWeight.w800, fontSize: 13)),
+                  ]),
                 ),
               ],
-            ),
+            ])),
           ),
           actions: [
-            TextButton(
-              onPressed: _isActionLoading ? null : () => Navigator.pop(context),
-              child: const Text('Annuler'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')),
             ElevatedButton(
-              onPressed: _isActionLoading
-                  ? null
-                  : () async {
-                      if (!formKey.currentState!.validate()) return;
-                      final navigator = Navigator.of(context);
-                      navigator.pop();
-
-                      await _runAction(
-                        () => _matchesService.submitScore(
-                          matchId: match.id,
-                          equipeId: selectedEquipeId,
-                          setsEquipe1: int.parse(score1),
-                          setsEquipe2: int.parse(score2),
-                        ),
-                        successMessage: 'Score saisi avec succes',
-                      );
-                    },
-              child: const Text('Envoyer'),
+              style: ElevatedButton.styleFrom(backgroundColor: _lime, foregroundColor: const Color(0xFF080C14)),
+              onPressed: winner == null ? null : () {
+                final sets1 = (s1e1 > s1e2 ? 1 : 0) + (s2e1 > s2e2 ? 1 : 0) +
+                    (needs3 && (int.tryParse(s3e1Ctrl.text) ?? 0) > (int.tryParse(s3e2Ctrl.text) ?? 0) ? 1 : 0);
+                final sets2 = (s1e2 > s1e1 ? 1 : 0) + (s2e2 > s2e1 ? 1 : 0) +
+                    (needs3 && (int.tryParse(s3e2Ctrl.text) ?? 0) > (int.tryParse(s3e1Ctrl.text) ?? 0) ? 1 : 0);
+                Navigator.pop(ctx, (
+                  sets1: sets1, sets2: sets2,
+                  s1: '$s1e1-$s1e2', s2: '$s2e1-$s2e2',
+                  s3: needs3 ? '${s3e1Ctrl.text}-${s3e2Ctrl.text}' : null,
+                ));
+              },
+              child: const Text('Confirmer'),
             ),
           ],
         );
-      },
+      }),
+    );
+
+    if (result == null) return;
+    await _runAction(
+      () => _matchesService.submitScore(
+        matchId: match.id,
+        equipeId: selectedEquipeId,
+        setsEquipe1: result.sets1,
+        setsEquipe2: result.sets2,
+        scoreSet1: result.s1,
+        scoreSet2: result.s2,
+        scoreSet3: result.s3,
+      ),
+      successMessage: 'Score saisi avec succès',
     );
   }
 
@@ -1218,6 +1307,10 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
                 _FilterTab(label: 'Programmés', selected: _viewFilter == MatchViewFilter.upcoming, onTap: () => setState(() => _viewFilter = MatchViewFilter.upcoming)),
                 const SizedBox(width: 8),
                 _FilterTab(label: 'Historique', selected: _viewFilter == MatchViewFilter.history, onTap: () => setState(() => _viewFilter = MatchViewFilter.history)),
+                const SizedBox(width: 8),
+                _FilterTab(label: 'Matchs', icon: Icons.sports_tennis_rounded, selected: _viewFilter == MatchViewFilter.matchs, onTap: () => setState(() => _viewFilter = MatchViewFilter.matchs)),
+                const SizedBox(width: 8),
+                _FilterTab(label: 'Tournois', icon: Icons.emoji_events_rounded, selected: _viewFilter == MatchViewFilter.tournois, onTap: () => setState(() => _viewFilter = MatchViewFilter.tournois)),
               ],
             ),
           ),
@@ -1266,25 +1359,44 @@ class _MesMatchsScreenState extends State<MesMatchsScreen> {
           const SizedBox(height: 14),
           _buildLevelEvolutionCard(),
           const SizedBox(height: 20),
-          _SectionTitle(label: 'Mes matchs à jouer'),
-          const SizedBox(height: 10),
-          if (_viewFilter != MatchViewFilter.history)
-            if (_upcomingMatches.isEmpty)
-              _EmptyState(message: 'Aucun match programmé.')
-            else
-              ..._upcomingMatches.map((m) => _buildMatchCard(m, allowSubmit: true)),
-          const SizedBox(height: 18),
-          _SectionTitle(label: 'Historique'),
-          const SizedBox(height: 10),
-          if (_viewFilter != MatchViewFilter.upcoming) ...[
-            _buildHistoryFilters(),
+          // ── Vue Matchs (tous les matchs réguliers) ──────────────────────
+          if (_viewFilter == MatchViewFilter.matchs) ...[
+            _SectionTitle(label: 'Tous les matchs'),
             const SizedBox(height: 10),
-            if (_filteredHistoryMatches.isEmpty)
-              _EmptyState(message: 'Aucun match trouvé.')
+            if (_myMatches.isEmpty)
+              _EmptyState(message: 'Aucun match.')
             else
-              ..._filteredHistoryMatches.map((m) => _buildMatchCard(m)),
+              ..._myMatches.map((m) => _buildMatchCard(m,
+                allowSubmit: m.status == MatchStatus.programme)),
+          ]
+          // ── Vue Tournois uniquement ──────────────────────────────────────
+          else if (_viewFilter == MatchViewFilter.tournois) ...[
+            _buildTournamentSection(),
+            if (_myTournaments.isEmpty)
+              _EmptyState(message: 'Aucun tournoi en cours.'),
+          ]
+          // ── Vue normale (Tous / Programmés / Historique) ─────────────────
+          else ...[
+            _SectionTitle(label: 'Mes matchs à jouer'),
+            const SizedBox(height: 10),
+            if (_viewFilter != MatchViewFilter.history)
+              if (_upcomingMatches.isEmpty)
+                _EmptyState(message: 'Aucun match programmé.')
+              else
+                ..._upcomingMatches.map((m) => _buildMatchCard(m, allowSubmit: true)),
+            const SizedBox(height: 18),
+            _SectionTitle(label: 'Historique'),
+            const SizedBox(height: 10),
+            if (_viewFilter != MatchViewFilter.upcoming) ...[
+              _buildHistoryFilters(),
+              const SizedBox(height: 10),
+              if (_filteredHistoryMatches.isEmpty)
+                _EmptyState(message: 'Aucun match trouvé.')
+              else
+                ..._filteredHistoryMatches.map((m) => _buildMatchCard(m)),
+            ],
+            _buildTournamentSection(),
           ],
-          _buildTournamentSection(),
         ],
       ),
     );
@@ -1439,13 +1551,14 @@ class _InfoChip extends StatelessWidget {
 }
 
 class _FilterTab extends StatelessWidget {
-  const _FilterTab({required this.label, required this.selected, required this.onTap});
+  const _FilterTab({required this.label, required this.selected, required this.onTap, this.icon});
 
   static const _lime = Color(0xFFC8F000);
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -1453,7 +1566,7 @@ class _FilterTab extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: selected ? _lime.withValues(alpha: 0.15) : const Color(0xFF0F1621),
           borderRadius: BorderRadius.circular(12),
@@ -1461,13 +1574,22 @@ class _FilterTab extends StatelessWidget {
             color: selected ? _lime.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.08),
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? _lime : Colors.white.withValues(alpha: 0.5),
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            fontSize: 13,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 13, color: selected ? _lime : Colors.white.withValues(alpha: 0.4)),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? _lime : Colors.white.withValues(alpha: 0.5),
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+          ],
         ),
       ),
     );

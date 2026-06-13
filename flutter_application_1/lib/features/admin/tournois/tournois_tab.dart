@@ -268,6 +268,7 @@ class _TournoisTabState extends State<TournoisTab> {
     String complexe = match.complexeSportif;
     int terrain = match.terrainNumero;
     TimeOfDay time = _parseTime(match.heureDebut);
+    DateTime date = match.dateMatch ?? t.date;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -286,10 +287,24 @@ class _TournoisTabState extends State<TournoisTab> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             _dropdownStr('Complexe sportif', _complexes, complexe, (v) => setS(() => complexe = v!)),
             const SizedBox(height: 12),
-            _dropdownInt('Terrain', List.generate(6, (i) => i + 1), terrain,
+            _dropdownInt('Terrain', List.generate(4, (i) => i + 1), terrain,
               (v) => setS(() => terrain = v!),
-              labels: List.generate(6, (i) => 'Terrain ${i + 1}')),
+              labels: List.generate(4, (i) => 'Terrain ${i + 1}')),
             const SizedBox(height: 12),
+            // Date picker
+            _label('Date du match'),
+            const SizedBox(height: 6),
+            _dateBanner(date, () async {
+              final picked = await showDatePicker(
+                context: ctx,
+                initialDate: date,
+                firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                lastDate: DateTime.now().add(const Duration(days: 730)),
+              );
+              if (picked != null) setS(() => date = picked);
+            }),
+            const SizedBox(height: 12),
+            // Time picker
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.schedule, color: _navy),
@@ -321,7 +336,8 @@ class _TournoisTabState extends State<TournoisTab> {
     await _runAction(
       () => _svc.updateMatchSchedule(
         tournamentId: t.id, matchId: match.id,
-        complexeSportif: complexe, terrainNumero: terrain, heureDebut: _fmtTime(time),
+        complexeSportif: complexe, terrainNumero: terrain,
+        heureDebut: _fmtTime(time), matchDate: date,
       ),
       'Planning mis à jour',
     );
@@ -694,6 +710,22 @@ class _TournoisTabState extends State<TournoisTab> {
     final leftMatches  = firstRound.sublist(0, matchCount ~/ 2);
     final rightMatches = firstRound.sublist(matchCount ~/ 2);
 
+    // Natural canvas size
+    const pBoxW  = _BracketCanvas.pBoxW;
+    const rBoxW  = _BracketCanvas.rBoxW;
+    const colGap = _BracketCanvas.colGap;
+    const centerW = _BracketCanvas.centerW;
+    const pBoxH  = _BracketCanvas.pBoxH;
+    const pGap   = _BracketCanvas.pGap;
+    const mGap   = _BracketCanvas.mGap;
+
+    final roundCount = rounds.length;
+    final leftCount  = rounds.first.length ~/ 2;
+    final halfWidth  = pBoxW + colGap + (roundCount - 1) * (rBoxW + colGap);
+    final naturalW   = halfWidth * 2 + centerW;
+    final matchH     = 2 * pBoxH + pGap;
+    final naturalH   = math.max(320.0, 40 + leftCount * matchH + math.max(0, leftCount - 1) * mGap + 180);
+
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       // Legend
       Wrap(spacing: 12, runSpacing: 6, children: [
@@ -703,20 +735,41 @@ class _TournoisTabState extends State<TournoisTab> {
       ]),
       const SizedBox(height: 16),
 
-      // Bracket canvas — horizontal scroll
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: _BracketCanvas(
-          tournament: t,
-          rounds: rounds,
-          leftMatches: leftMatches,
-          rightMatches: rightMatches,
-          getName: (id) => _participantName(t, id),
-          onMatchTap: (m) => _showMatchParamsDialog(t, m),
-          onWinnerTap: (m) => _showWinnerDialog(t, m),
-          actionLoading: _actionLoading,
-        ),
-      ),
+      // Bracket canvas — scales down to fit screen, pinch-to-zoom to inspect details
+      LayoutBuilder(builder: (ctx, cst) {
+        final availW = cst.maxWidth > 0 ? cst.maxWidth : naturalW;
+        final scale  = math.min(1.0, availW / naturalW);
+        final scaledH = naturalH * scale;
+
+        return SizedBox(
+          width: availW,
+          height: scaledH,
+          child: InteractiveViewer(
+            constrained: false,
+            minScale: scale * 0.5,
+            maxScale: 2.5,
+            boundaryMargin: const EdgeInsets.all(32),
+            child: Transform.scale(
+              scale: scale,
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: naturalW,
+                height: naturalH,
+                child: _BracketCanvas(
+                  tournament: t,
+                  rounds: rounds,
+                  leftMatches: leftMatches,
+                  rightMatches: rightMatches,
+                  getName: (id) => _participantName(t, id),
+                  onMatchTap: (m) => _showMatchParamsDialog(t, m),
+                  onWinnerTap: (m) => _showWinnerDialog(t, m),
+                  actionLoading: _actionLoading,
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
     ]);
   }
 
@@ -869,15 +922,15 @@ class _BracketCanvas extends StatelessWidget {
   final void Function(TournamentMatch) onWinnerTap;
   final bool actionLoading;
 
-  // Layout constants
-  static const double pBoxW  = 130;
-  static const double pBoxH  = 38;
-  static const double pGap   = 6;   // gap between 2 participants of same match
-  static const double mGap   = 24;  // gap between matches in same round
-  static const double colGap = 56;  // horizontal gap between rounds
-  static const double rBoxW  = 130; // result box width
-  static const double rBoxH  = 62;  // result box height (schedule + winner + score lines)
-  static const double centerW = 180; // finale center column
+  // Layout constants — exposed as static so _buildBracket can compute natural size
+  static const double pBoxW   = 130;
+  static const double pBoxH   = 38;
+  static const double pGap    = 6;    // gap between 2 participants of same match
+  static const double mGap    = 24;   // gap between matches in same round
+  static const double colGap  = 56;   // horizontal gap between rounds
+  static const double rBoxW   = 130;  // result box width
+  static const double rBoxH   = 62;   // result box height
+  static const double centerW = 180;  // finale center column
 
   // ── Layout ─────────────────────────────────────────────────────────────────
 
@@ -1069,12 +1122,19 @@ class _BracketCanvas extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Schedule info row
-            if (match != null)
+            if (match != null) ...[
+              if (match.dateMatch != null)
+                Text(
+                  '${match.dateMatch!.day.toString().padLeft(2,'0')}/${match.dateMatch!.month.toString().padLeft(2,'0')}/${match.dateMatch!.year}',
+                  style: const TextStyle(fontSize: 7, color: Colors.blueGrey, fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
+                ),
               Text(
                 '${match.heureDebut}  T${match.terrainNumero}  ${match.complexeSportif}',
                 style: const TextStyle(fontSize: 7.5, color: Colors.blueGrey, fontWeight: FontWeight.w600),
                 overflow: TextOverflow.ellipsis,
               ),
+            ],
             const SizedBox(height: 2),
             // Winner / tap label
             Row(children: [
@@ -1167,17 +1227,24 @@ class _BracketCanvas extends StatelessWidget {
             width: centerW,
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
             color: _navy.withValues(alpha: 0.08),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.schedule, size: 9, color: _navy),
-              const SizedBox(width: 3),
-              Text('${f.heureDebut}  T${f.terrainNumero}',
-                style: const TextStyle(fontSize: 9, color: _navy, fontWeight: FontWeight.w700)),
-              const SizedBox(width: 6),
-              const Icon(Icons.location_on_outlined, size: 9, color: _navy),
-              const SizedBox(width: 2),
-              Flexible(child: Text(f.complexeSportif,
-                style: const TextStyle(fontSize: 9, color: _navy, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
+              if (f.dateMatch != null)
+                Text(
+                  '${f.dateMatch!.day.toString().padLeft(2,'0')}/${f.dateMatch!.month.toString().padLeft(2,'0')}/${f.dateMatch!.year}',
+                  style: const TextStyle(fontSize: 9, color: _navy, fontWeight: FontWeight.w800),
+                ),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.schedule, size: 9, color: _navy),
+                const SizedBox(width: 3),
+                Text('${f.heureDebut}  T${f.terrainNumero}',
+                  style: const TextStyle(fontSize: 9, color: _navy, fontWeight: FontWeight.w700)),
+                const SizedBox(width: 6),
+                const Icon(Icons.location_on_outlined, size: 9, color: _navy),
+                const SizedBox(width: 2),
+                Flexible(child: Text(f.complexeSportif,
+                  style: const TextStyle(fontSize: 9, color: _navy, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis)),
+              ]),
             ]),
           ),
         Container(

@@ -2,12 +2,19 @@ import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 class ApiConfig {
-  // Auto-detected: web & iOS → localhost, Android emulator → 10.0.2.2
-  // For a real Android device, set _deviceHost below to your PC's local IP.
-  static const String _deviceHost = '10.0.2.2'; // emulator; change to LAN IP for real phone
+  static const String _deviceHost = '192.168.1.21'; // IP du PC sur le WiFi
 
   static String get _host {
-    if (kIsWeb) return 'localhost';
+    if (kIsWeb) {
+      // Utilise le même hôte que la page web :
+      // PC (localhost:8080) → localhost:5001
+      // Téléphone (192.168.1.116:8080) → 192.168.1.116:5001
+      final pageHost = Uri.base.host;
+      if (pageHost.isEmpty || pageHost == 'localhost' || pageHost == '127.0.0.1') {
+        return 'localhost';
+      }
+      return pageHost;
+    }
     if (defaultTargetPlatform == TargetPlatform.android) return _deviceHost;
     return 'localhost';
   }
